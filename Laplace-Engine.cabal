@@ -1,0 +1,40 @@
+name:          Laplace-Engine
+version:       0.0.0
+build-type:    Simple
+cabal-version: >= 1.18
+copyright: 2020 Tristan Hilbert
+license:   MIT
+synopsis:  Some Hacked together Haskell
+
+-- Libraries
+
+-- Main Library
+library
+    if flag(documentation)
+        build-depends: hscolour == 1.20.*
+
+-- Hello World Example Library
+library HelloWorld
+    exposed-modules: HelloWorld
+    hs-source-dirs: library
+    build-depends: base
+
+
+-- Executable Definition
+executable Laplace-Engine
+    build-depends: base, HelloWorld
+    default-language: Haskell2010
+    hs-source-dirs: executable
+    main-is: Main.hs
+
+-- Documentation Generation Flag
+flag documentation
+    default: False
+
+-- Tests Definition
+test-suite hspec
+    build-depends:    base, HelloWorld, hspec == 1.8.*
+    default-language: Haskell2010
+    hs-source-dirs:   test-suite
+    main-is:          Spec.hs
+    type:             exitcode-stdio-1.0
