@@ -1,11 +1,14 @@
 module Main (main) where
 
-import HelloWorld (helloWorld)
-import Engine (engine)
-import ExampleGame (exampleGame)
+import Engine
+import ExampleGame (exampleGame, enabledSystems)
+
+
+complete :: ([System] -> Game) -> IO()
+complete _ = putStrLn "Completed Game!"
 
 main :: IO()
 main = do {
-    print helloWorld;
-    engine exampleGame
+    putStrLn "Hello World!";
+    complete (run enabledSystems exampleGame)
 }

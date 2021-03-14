@@ -1,50 +1,37 @@
 -- | Module Definition for Laplace-Engine
 module Engine (
--- Types
-    Game,
+    SystemKey,
     Entity,
--- Methods
-    getName,
-    addComponentToEntity,
--- Functions
-    engine,
+    System,
+    Component(..),
+    Game,
+    newGame,
     newEntity,
-    newText
+    run
 ) where
 
-import Data.Map (Map, insert, keys, empty)
+import Data.Map (Map, empty)
+import qualified Data.Map as Map
 
+type SystemKey = String
 
--- Base Type definitions
-data Entry = NONE
-    | TPL Entry Entry
-    | STR [Char]
-    | INT Integer
-    | FLT Float
+type Entity = Map SystemKey [Component]
 
-type Component = (String, [Entry])
-type Systems = ([Entity], Entity) -> ([Entity], Entity)
-type Entity = Map [Char] Component
+type System = Entity -> Entity
+
 type Game = [Entity]
 
--- Getting the name of a component
-getName :: Component -> String
-getName x = fst x
+data Component = Tail System | Frame System Component
 
--- Create a blank entity
+newGame :: Game
+newGame = []
+
 newEntity :: Entity
 newEntity = empty
 
--- Add an entity to a game
-addComponentToEntity :: (Component, Entity) -> Entity
-addComponentToEntity (a, b) = insert (getName a) a b
+frame :: [System] -> Game -> Game
+frame (x:xs) game = frame xs (map x game) 
+frame [] game = game
 
--- Revving the engine
-engine :: Game -> IO ()
-engine [] = print "Done"
-engine (ent:ents) = do{print (keys ent);  engine (ents)}
-
--- Text Definition Example
--- Text should also have coordinates among other properties
-newText :: [Char] -> Component
-newText s = ("Text", [STR s])
+run :: [System] -> Game -> [System] -> Game
+run keys game = run keys (frame keys game)

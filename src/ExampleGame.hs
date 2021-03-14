@@ -1,14 +1,13 @@
 -- | An example of the Game Struct
 
-module ExampleGame (exampleGame) where
+module ExampleGame (exampleGame, enabledSystems) where
 
 import Engine
+import Console
 
 -- Entity Definitions
-entities :: [Entity]
-entities = [ addComponentToEntity ((newText "hello"), newEntity), addComponentToEntity ((newText "world"), newEntity)]
-
-
-
 exampleGame :: Game
-exampleGame = entities
+exampleGame = [(attachConsole newEntity "Hello World")]
+
+enabledSystems :: [System]
+enabledSystems = [console]
