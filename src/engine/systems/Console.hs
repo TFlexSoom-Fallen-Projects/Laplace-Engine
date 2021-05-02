@@ -15,24 +15,27 @@ consoleKey :: SystemKey
 consoleKey = "Console System"
 
 consoleMsgDefault :: String
-consoleMsgDefault = "Some Entity"
+consoleMsgDefault = "Default Console Message!"
 
 consoleDefault :: Component
 consoleDefault = newConsole consoleMsgDefault
 
 attachConsole :: Entity -> String -> Entity
-attachConsole entity msg = insert consoleKey (oldConsoleList ++ [newConsole msg]) entity
-    where oldConsoleList = findWithDefault [] consoleKey entity
+attachConsole entity msg = insert consoleKey (oldComponentList ++ [newConsole msg]) entity
+    where oldComponentList = findWithDefault [] consoleKey entity
 
 newConsole :: String -> Component
-newConsole msg = Tail (consoleSystem msg)
+newConsole msg = COMPONENT (consoleSystem msg)
 
 consoleSystem :: String -> System
-consoleSystem msg entity = entity
+consoleSystem msg entity = ([LOG msg], entity)
 
-consoleIter :: [Component] -> Entity -> Entity
-consoleIter ((Tail system):xs) entity = consoleIter xs (system entity)
-consoleIter [] entity = entity
+consoleIter :: [Component] -> System
+consoleIter ((COMPONENT sys):xs) entity = ((fst iter) ++ (fst others), snd others)
+    where 
+        iter = sys entity
+        others = consoleIter xs (snd iter)
+consoleIter [] entity = ([], entity)
 
 console :: System
 console entity = consoleIter componentList entity
