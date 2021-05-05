@@ -1,16 +1,22 @@
 module Main (main) where
 
 import Engine
-import EngineIO (performActions)
 import ExampleGame (exampleGame, enabledSystems)
 
 
-passOffAction :: ([Action], Game) -> Game
-passOffAction (actionList, game) = performActions actionList >> game
+passOffAction :: ([IO ()], Game) -> IO Game
+passOffAction ((action:actions), game) = do {
+    action;
+    passOffAction (actions, game)
+}
+passOffAction ([], game) = return game
+
 
 loop :: Game -> IO ()
-loop game = loop newGame
-    where newGame = passOffAction(run1Frame enabledSystems game)
+loop game = do {
+    newGame <- passOffAction(run1Frame enabledSystems game);
+    loop newGame
+}
 
 main :: IO ()
 main = loop exampleGame

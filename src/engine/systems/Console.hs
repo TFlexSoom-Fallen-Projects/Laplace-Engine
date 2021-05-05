@@ -28,7 +28,7 @@ newConsole :: String -> Component
 newConsole msg = COMPONENT (consoleSystem msg)
 
 consoleSystem :: String -> System
-consoleSystem msg entity = ([LOG msg], entity)
+consoleSystem msg entity = ([putStrLn msg], entity)
 
 consoleIter :: [Component] -> System
 consoleIter ((COMPONENT sys):xs) entity = ((fst iter) ++ (fst others), snd others)

@@ -2,7 +2,6 @@
 module Engine (
     SystemKey,
     Entity,
-    Action(..),
     System,
     Component(..),
     Game,
@@ -39,7 +38,7 @@ type Entity = Map SystemKey [Component]
     1. Every System should have a SystemKey
     2. Every System should have a way to attach to the Entity or a Component Form
 -}
-type System = Entity -> ([Action], Entity)
+type System = Entity -> ([IO ()], Entity)
 
 {-
     Game:
@@ -58,12 +57,6 @@ type Game = [Entity]
 -}
 data Component = COMPONENT System
 
-{-
-    Action:
-    List of actions performed on an IO monad. Completed from start to end.
--}
-data Action = LOG String
-
 newGame :: Game
 newGame = []
 
@@ -71,7 +64,7 @@ newEntity :: Entity
 newEntity = empty
 
 -- Hmmm... I wonder if the game itself represents an entity.
-run1Frame :: [System] -> Game -> ([Action], Game)
+run1Frame :: [System] -> Game -> ([IO ()], Game)
 run1Frame (x:xs) game = ((fst iter) ++ (fst others), snd others)
     where 
         iter = concatTplList (map x game)
