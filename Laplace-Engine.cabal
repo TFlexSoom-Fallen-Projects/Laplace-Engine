@@ -9,17 +9,15 @@ synopsis:  Some Hacked together Haskell
 -- Libraries
 
 -- Main Library
-library
-    if flag(documentation)
-        build-depends: hscolour == 1.20.*
-
 library Engine
     exposed-modules: Engine, Console
+    default-language: Haskell2010
     hs-source-dirs: src/engine, src/engine/systems
     build-depends: base, containers
 
 library ExampleGame
     exposed-modules: ExampleGame
+    default-language: Haskell2010
     hs-source-dirs: src
     build-depends: base, Engine
 
@@ -36,8 +34,8 @@ flag documentation
 
 -- Tests Definition
 test-suite hspec
-    build-depends:    base, HelloWorld, Engine, Game, hspec == 1.8.*
+    build-depends:    base, containers, Engine, ExampleGame, hspec == 2.7.*, QuickCheck == 2.14.*
     default-language: Haskell2010
-    hs-source-dirs:   test-suite
+    hs-source-dirs:   test-suite, test-suite/engine
     main-is:          Spec.hs
     type:             exitcode-stdio-1.0
