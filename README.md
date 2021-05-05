@@ -1,5 +1,5 @@
 # Laplace-Engine
-An attempt at a Game Engine made entirely in Haskell. A hobby project of sorts with no real deadline. Currently an architecture is outline but not implemented.
+An attempt at a Game Engine made entirely in Haskell. A hobby project of sorts with no real deadline. Currently an architecture is outlined but not implemented.
 
 ## Repository Structure
 Structure Modelled off of: [Haskelleton](http://taylor.fausak.me/2014/03/04/haskeleton-a-haskell-project-skeleton/)
