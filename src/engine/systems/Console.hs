@@ -12,7 +12,7 @@ import qualified Data.Map as Map
 import Data.Maybe(mapMaybe)
 
 consoleKey :: SystemKey
-consoleKey = "Console System"
+consoleKey = "ConSys"
 
 consoleMsgDefault :: String
 consoleMsgDefault = "Default Console Message!"
@@ -25,15 +25,15 @@ attachConsole entity msg = insert consoleKey (oldComponentList ++ [newConsole ms
     where oldComponentList = findWithDefault [] consoleKey entity
 
 newConsole :: String -> Component
-newConsole msg = COMPONENT (consoleSystem msg)
+newConsole msg = METADATA "Console System Instance" (COMPONENT (consoleSystem msg))
 
 consoleSystem :: String -> System
 consoleSystem msg entity = ([putStrLn msg], entity)
 
 consoleIter :: [Component] -> System
-consoleIter ((COMPONENT sys):xs) entity = ((fst iter) ++ (fst others), snd others)
+consoleIter (x:xs) entity = ((fst iter) ++ (fst others), snd others)
     where 
-        iter = sys entity
+        iter = (stripComponent x) entity
         others = consoleIter xs (snd iter)
 consoleIter [] entity = ([], entity)
 

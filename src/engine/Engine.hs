@@ -5,9 +5,11 @@ module Engine (
     System,
     Component(..),
     Game,
+    stripComponent,
     newGame,
     newEntity,
-    run1Frame
+    run1Frame,
+    dumpMetadata
 ) where
 
 import Data.Map (Map, empty)
@@ -55,7 +57,21 @@ type Game = [Entity]
     against its own cardinality. A System has no state without a Component. An Entity carries 
     a Component.
 -}
-data Component = COMPONENT System
+data Component = METADATA String Component | COMPONENT System
+
+instance Show Component where
+    show ( METADATA msg a ) = (++) taggedMetadata (show a)
+        where taggedMetadata = (++) ((++) "x" (msg)) ">"
+    show ( COMPONENT a ) = "{System}"
+
+instance Eq Component where
+    (==) ( METADATA msg a ) (METADATA msg1 b ) = (&&) ((==) msg msg1) ((==) a b)
+    (==) ( COMPONENT _ ) (COMPONENT _ ) = True
+    (==) _ _ = False
+    
+stripComponent :: Component -> System
+stripComponent ( METADATA _ a ) = stripComponent a
+stripComponent ( COMPONENT a) = a
 
 newGame :: Game
 newGame = []
@@ -78,3 +94,7 @@ concatTplList (cur:others) = (fst cur ++ (fst res), [snd cur] ++ (snd res))
     where res = concatTplList others
 concatTplList [] = ([], [])
 
+
+dumpMetadata :: Game -> [Char]
+dumpMetadata (x:xs) = (++) (show x) (dumpMetadata xs)
+dumpMetadata [] = ""
