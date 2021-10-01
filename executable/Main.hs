@@ -19,15 +19,4 @@ loop game = do {
 }
 
 main :: IO ()
-main = do {
-    game1 <- passOffAction(run1Frame enabledSystems exampleGame);
-    do {
-        game2 <- passOffAction(run1Frame enabledSystems game1);
-        do {
-            game3 <- passOffAction(run1Frame enabledSystems game2);
-            do {
-                putStrLn (dumpMetadata game3)
-            }
-        }
-    }
-}
+main = loop exampleGame
