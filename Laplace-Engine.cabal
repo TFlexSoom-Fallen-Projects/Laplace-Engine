@@ -10,15 +10,15 @@ synopsis:  Some Hacked together Haskell
 
 -- Main Library
 library Engine
-    exposed-modules: Engine, Console
+    exposed-modules: Engine, Systems.Console, Entities.Actor
     default-language: Haskell2010
-    hs-source-dirs: src/engine, src/engine/systems
+    hs-source-dirs: engine, engine/Systems, engine/Entities
     build-depends: base, containers
 
 library ExampleGame
     exposed-modules: ExampleGame
     default-language: Haskell2010
-    hs-source-dirs: src
+    hs-source-dirs: game
     build-depends: base, Engine
 
 -- Executable Definition
@@ -36,6 +36,6 @@ flag documentation
 test-suite hspec
     build-depends:    base, containers, Engine, ExampleGame, hspec == 2.7.*, QuickCheck == 2.14.*
     default-language: Haskell2010
-    hs-source-dirs:   test-suite, test-suite/engine
+    hs-source-dirs:   test-suite
     main-is:          Spec.hs
     type:             exitcode-stdio-1.0

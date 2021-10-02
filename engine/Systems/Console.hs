@@ -1,15 +1,16 @@
-{-
+module Systems.Console (
+    attachConsole, 
+    console
+) where
 
-Console System that prints out a "name"
-
--}
-
-module Console (attachConsole, console) where
+-- | Console System that prints out a "name"
 
 import Engine
+    ( Component(..), System, Entity, SystemKey, stripComponent )
 import Data.Map (Map, findWithDefault, insert, member)
 import qualified Data.Map as Map
 import Data.Maybe(mapMaybe)
+import Data.Bifunctor(first)
 
 consoleKey :: SystemKey
 consoleKey = "ConSys"
@@ -31,9 +32,9 @@ consoleSystem :: String -> System
 consoleSystem msg entity = ([putStrLn msg], entity)
 
 consoleIter :: [Component] -> System
-consoleIter (x:xs) entity = ((fst iter) ++ (fst others), snd others)
+consoleIter (x:xs) entity = first ( fst iter ++ ) others
     where 
-        iter = (stripComponent x) entity
+        iter = stripComponent x entity
         others = consoleIter xs (snd iter)
 consoleIter [] entity = ([], entity)
 

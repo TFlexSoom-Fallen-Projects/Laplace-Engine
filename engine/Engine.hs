@@ -1,4 +1,3 @@
--- | Module Definition for Laplace-Engine
 module Engine (
     SystemKey,
     Entity,
@@ -12,6 +11,10 @@ module Engine (
     dumpMetadata
 ) where
 
+-- | Module Definition for Laplace-Engine
+
+import Data.Bifunctor(first, bimap)
+import Data.Foldable(concatMap)
 import Data.Map (Map, empty)
 import qualified Data.Map as Map
 
@@ -27,7 +30,7 @@ type SystemKey = String
     Data Holder
     Holds the attached/acting Systems on the piece of data represented through Map's key
     Holds possible callstack of previous System Actions (Component)
--} 
+-}
 type Entity = Map SystemKey [Component]
 
 {-
@@ -61,14 +64,14 @@ data Component = METADATA String Component | COMPONENT System
 
 instance Show Component where
     show ( METADATA msg a ) = (++) taggedMetadata (show a)
-        where taggedMetadata = (++) ((++) "x" (msg)) ">"
+        where taggedMetadata = (++) ((++) "x" msg) ">"
     show ( COMPONENT a ) = "{System}"
 
 instance Eq Component where
     (==) ( METADATA msg a ) (METADATA msg1 b ) = (&&) ((==) msg msg1) ((==) a b)
     (==) ( COMPONENT _ ) (COMPONENT _ ) = True
     (==) _ _ = False
-    
+
 stripComponent :: Component -> System
 stripComponent ( METADATA _ a ) = stripComponent a
 stripComponent ( COMPONENT a) = a
@@ -81,8 +84,8 @@ newEntity = empty
 
 -- Hmmm... I wonder if the game itself represents an entity.
 run1Frame :: [System] -> Game -> ([IO ()], Game)
-run1Frame (x:xs) game = ((fst iter) ++ (fst others), snd others)
-    where 
+run1Frame (x:xs) game = first ( fst iter ++ ) others
+    where
         iter = concatTplList (map x game)
         others = run1Frame xs (snd iter)
 
@@ -90,11 +93,10 @@ run1Frame [] game = ([], game)
 
 
 concatTplList :: [([a], b)] -> ([a], [b])
-concatTplList (cur:others) = (fst cur ++ (fst res), [snd cur] ++ (snd res))
+concatTplList (cur:others) = bimap ( fst cur ++ ) ( [snd cur] ++ ) res
     where res = concatTplList others
 concatTplList [] = ([], [])
 
 
 dumpMetadata :: Game -> [Char]
-dumpMetadata (x:xs) = (++) (show x) (dumpMetadata xs)
-dumpMetadata [] = ""
+dumpMetadata = concatMap show

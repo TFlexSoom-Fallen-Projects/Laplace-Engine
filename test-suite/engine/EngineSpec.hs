@@ -1,11 +1,11 @@
 module Engine.EngineSpec (spec) where
 
-import Engine (newGame, newEntity, run1Frame)
-import Console
+import Engine (newGame, newEntity)
+import Systems.Console ()
 import Data.Map (Map, empty)
 import qualified Data.Map as Map
-import Test.Hspec
-import Test.QuickCheck
+import Test.Hspec ( describe, it, shouldBe, Spec )
+import Test.QuickCheck ()
 
 spec :: Spec
 spec = do
