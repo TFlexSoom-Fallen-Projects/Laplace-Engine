@@ -11,12 +11,12 @@ module Engine (
     dumpMetadata
 ) where
 
--- | Module Definition for Laplace-Engine
-
 import Data.Bifunctor(first, bimap)
 import Data.Foldable(concatMap)
 import Data.Map (Map, empty)
 import qualified Data.Map as Map
+
+-- | Module Definition for Laplace-Engine
 
 {- 
     SystemKey: 

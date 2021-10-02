@@ -3,14 +3,14 @@ module Systems.Console (
     console
 ) where
 
--- | Console System that prints out a "name"
-
 import Engine
     ( Component(..), System, Entity, SystemKey, stripComponent )
 import Data.Map (Map, findWithDefault, insert, member)
 import qualified Data.Map as Map
 import Data.Maybe(mapMaybe)
 import Data.Bifunctor(first)
+
+-- | Console System that prints out a "name"
 
 consoleKey :: SystemKey
 consoleKey = "ConSys"
