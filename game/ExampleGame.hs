@@ -1,8 +1,8 @@
 module ExampleGame (exampleGame, enabledSystems) where
 
-import Engine(Game, System)
+import Engine(Game, SystemKey)
 import Entities.Actor(actor)
-import Systems.Console(console)
+import Systems.Console(consoleKey)
 
 {-
 
@@ -15,5 +15,5 @@ An example Game Built With Engine
 exampleGame :: Game
 exampleGame = [actor]
 
-enabledSystems :: [System]
-enabledSystems = [console]
+enabledSystems :: [SystemKey]
+enabledSystems = [consoleKey]

@@ -10,7 +10,7 @@ synopsis:  Some Hacked together Haskell
 
 -- Main Library
 library Engine
-    exposed-modules: Engine, Systems.Console, Entities.Actor
+    exposed-modules: Util, Engine, Systems.Console, Systems.Input, Entities.Actor
     default-language: Haskell2010
     hs-source-dirs: engine, engine/Systems, engine/Entities
     build-depends: base, containers

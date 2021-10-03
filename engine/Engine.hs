@@ -1,20 +1,26 @@
 module Engine (
     SystemKey,
     Entity,
-    System,
-    Component(..),
-    Game,
-    stripComponent,
-    newGame,
     newEntity,
+    newEntityFromList,
+    System,
+    attachSystem,
+    attachSystems,
+    Game,
+    newGame,
     run1Frame,
-    dumpMetadata
+    dumpMetadata,
+    Component(..),
+
 ) where
 
-import Data.Bifunctor(first, bimap)
+import Data.Bifunctor(first)
 import Data.Foldable(concatMap)
-import Data.Map (Map, empty)
+import Data.Map (Map, empty, findWithDefault, insert, member, fromList)
 import qualified Data.Map as Map
+import Data.Maybe(mapMaybe)
+
+import Util (concatTplList)
 
 -- | Module Definition for Laplace-Engine
 
@@ -33,6 +39,12 @@ type SystemKey = String
 -}
 type Entity = Map SystemKey [Component]
 
+newEntity :: Entity
+newEntity = empty
+
+newEntityFromList :: [(SystemKey, Component)] -> Entity
+newEntityFromList list = attachSystems list newEntity
+
 {-
     System:
     Acting Agent
@@ -45,12 +57,48 @@ type Entity = Map SystemKey [Component]
 -}
 type System = Entity -> ([IO ()], Entity)
 
+attachSystem :: SystemKey -> Component -> Entity -> Entity
+attachSystem key comp entity = insert key newComponentList entity
+    where 
+        newComponentList = oldComponentList ++ [comp]
+        oldComponentList = findWithDefault [] key entity
+
+attachSystems :: [(SystemKey, Component)] -> Entity -> Entity
+attachSystems list entity = foldr (uncurry attachSystem) entity list 
+
+-- Private
+iterSysComps :: [Component] -> System
+iterSysComps (x:xs) entity = first ( fst iter ++ ) others
+    where 
+        iter = stripComponent x entity
+        others = iterSysComps xs (snd iter)
+iterSysComps [] entity = ([], entity)
+
+-- Private
+runSystem :: SystemKey -> System
+runSystem key entity = iterSysComps componentList entity
+    where componentList = findWithDefault [] key entity
+
 {-
     Game:
     List of entities which can be filtered with system boolean map. Entities will then
     used their captured lambdas to perform the work of the game.
 -}
 type Game = [Entity]
+
+newGame :: Game
+newGame = []
+
+run1Frame :: [SystemKey] -> Game -> ([IO ()], Game)
+run1Frame (x:xs) game = first ( fst iter ++ ) others
+    where
+        iter = concatTplList (map (runSystem x) game)
+        others = run1Frame xs (snd iter)
+
+run1Frame [] game = ([], game)
+
+dumpMetadata :: Game -> [Char]
+dumpMetadata = concatMap show
 
 {-
     Component:
@@ -72,31 +120,7 @@ instance Eq Component where
     (==) ( COMPONENT _ ) (COMPONENT _ ) = True
     (==) _ _ = False
 
+-- Private
 stripComponent :: Component -> System
 stripComponent ( METADATA _ a ) = stripComponent a
-stripComponent ( COMPONENT a) = a
-
-newGame :: Game
-newGame = []
-
-newEntity :: Entity
-newEntity = empty
-
--- Hmmm... I wonder if the game itself represents an entity.
-run1Frame :: [System] -> Game -> ([IO ()], Game)
-run1Frame (x:xs) game = first ( fst iter ++ ) others
-    where
-        iter = concatTplList (map x game)
-        others = run1Frame xs (snd iter)
-
-run1Frame [] game = ([], game)
-
-
-concatTplList :: [([a], b)] -> ([a], [b])
-concatTplList (cur:others) = bimap ( fst cur ++ ) ( [snd cur] ++ ) res
-    where res = concatTplList others
-concatTplList [] = ([], [])
-
-
-dumpMetadata :: Game -> [Char]
-dumpMetadata = concatMap show
+stripComponent ( COMPONENT a ) = a

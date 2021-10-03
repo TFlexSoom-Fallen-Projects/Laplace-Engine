@@ -5,7 +5,7 @@ import ExampleGame (exampleGame, enabledSystems)
 
 
 passOffAction :: ([IO ()], Game) -> IO Game
-passOffAction ((action:actions), game) = do {
+passOffAction (action:actions, game) = do {
     action;
     passOffAction (actions, game)
 }

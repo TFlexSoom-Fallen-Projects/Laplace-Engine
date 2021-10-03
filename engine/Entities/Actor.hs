@@ -2,10 +2,10 @@ module Entities.Actor(
   actor
 ) where
 
-import Engine(newEntity, Entity)
-import Systems.Console(attachConsole)
+import Engine(Entity, newEntityFromList)
+import Systems.Console(consoleKey, newConsole)
 
 -- | Pre-made Actor Entity
 
 actor :: Entity
-actor = attachConsole newEntity "Hello World"
+actor = newEntityFromList [(consoleKey, newConsole "Hello World")]
