@@ -1,7 +1,6 @@
-module Engine.EngineSpec (spec) where
+module Engine.SDKSpec (spec) where
 
-import Engine (newGame, newEntity)
-import Systems.Console ()
+import SDK (newGame, newEntity)
 import Data.Map (Map, empty)
 import qualified Data.Map as Map
 import Test.Hspec ( describe, it, shouldBe, Spec )
@@ -15,5 +14,5 @@ spec = do
     
     describe "newGame" $ do
         it "returns an empty list" $ do
-            newGame `shouldBe` []
+            newGame `shouldBe` ([], [])
 

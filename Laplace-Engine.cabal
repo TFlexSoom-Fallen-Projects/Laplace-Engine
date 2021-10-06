@@ -1,19 +1,34 @@
-name:          Laplace-Engine
-version:       0.0.0
-build-type:    Simple
-cabal-version: >= 1.18
+cabal-version: 2.4
+name: Laplace-Engine
+version:  0.1.0.0
+build-type: Simple
 copyright: 2020 Tristan Hilbert
-license:   MIT
-synopsis:  Some Hacked together Haskell
+license: MIT
+synopsis: Some Hacked together Haskell
+author: TFlexSoom
+maintainer: tchilbert@live.com
 
--- Libraries
+-- A longer description of the package.
+-- description:
+
+-- A URL where users can report bugs.
+-- bug-reports:
+
+-- A copyright notice.
+-- category:
+
+
+extra-source-files:
+    CHANGELOG.md
+    README.md
 
 -- Main Library
 library Engine
-    exposed-modules: Util, Engine, Systems.Console, Systems.Input, Entities.Actor
+    exposed-modules: Util, SDK, Systems.Console, Systems.Input, Entities.Actor
+    other-modules: Engine
     default-language: Haskell2010
     hs-source-dirs: engine, engine/Systems, engine/Entities
-    build-depends: base, containers
+    build-depends: base, containers, OpenGL == 3.0.*, GLFW-b == 3.3.*
 
 library ExampleGame
     exposed-modules: ExampleGame
@@ -21,21 +36,28 @@ library ExampleGame
     hs-source-dirs: game
     build-depends: base, Engine
 
--- Executable Definition
-executable Laplace-Engine
-    build-depends: base, Engine, ExampleGame
-    default-language: Haskell2010
-    hs-source-dirs: executable
-    main-is: Main.hs
-
 -- Documentation Generation Flag
 flag documentation
     default: False
 
 -- Tests Definition
 test-suite hspec
-    build-depends:    base, containers, Engine, ExampleGame, hspec == 2.7.*, QuickCheck == 2.14.*
+    build-depends: base, containers, Engine, ExampleGame, hspec == 2.7.*, QuickCheck == 2.14.*
+    other-modules: Engine.SDKSpec
     default-language: Haskell2010
-    hs-source-dirs:   test-suite
-    main-is:          Spec.hs
-    type:             exitcode-stdio-1.0
+    hs-source-dirs: test-suite, test-suite/engine
+    main-is: Spec.hs
+    type: exitcode-stdio-1.0
+
+-- Executable Definition
+executable Laplace-Engine
+    main-is:          Main.hs
+
+    -- Modules included in this executable, other than Main.
+    -- other-modules:
+
+    -- LANGUAGE extensions used by modules in this package.
+    -- other-extensions:
+    build-depends:    base >= 4.14.1.0, Engine, ExampleGame
+    hs-source-dirs:   executable
+    default-language: Haskell2010

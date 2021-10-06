@@ -3,9 +3,9 @@ module Entities.Actor(
 ) where
 
 import Engine(Entity, newEntityFromList)
-import Systems.Console(consoleKey, newConsole)
+import Systems.Console(newConsole, addMessage)
 
 -- | Pre-made Actor Entity
 
 actor :: Entity
-actor = newEntityFromList [(consoleKey, newConsole "Hello World")]
+actor = newEntityFromList [newConsole, addMessage "Hello World"]

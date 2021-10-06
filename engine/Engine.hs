@@ -1,26 +1,32 @@
 module Engine (
     SystemKey,
+    enableSystem,
     Entity,
     newEntity,
     newEntityFromList,
+    addEntity,
     System,
-    attachSystem,
-    attachSystems,
+    concatIO,
     Game,
     newGame,
-    run1Frame,
+    runFrame,
     dumpMetadata,
+    runGame,
     Component(..),
-
+    insertComponent,
+    insertComponents,
+    adjustDefaultComponent,
+    adjustComponent
 ) where
 
-import Data.Bifunctor(first)
+import Data.Bifunctor(first, second)
 import Data.Foldable(concatMap)
-import Data.Map (Map, empty, findWithDefault, insert, member, fromList)
+import Data.Map (Map, empty, findWithDefault, insert, member, fromList, adjust)
 import qualified Data.Map as Map
 import Data.Maybe(mapMaybe)
 
 import Util (concatTplList)
+import Data.Graph (components)
 
 -- | Module Definition for Laplace-Engine
 
@@ -30,6 +36,9 @@ import Util (concatTplList)
     Each System should have it's own unique key to show existance on an entity
 -}
 type SystemKey = String
+
+enableSystem :: String -> Game -> Game
+enableSystem key = first (key :)
 
 {-
     Entity:
@@ -42,8 +51,11 @@ type Entity = Map SystemKey [Component]
 newEntity :: Entity
 newEntity = empty
 
-newEntityFromList :: [(SystemKey, Component)] -> Entity
-newEntityFromList list = attachSystems list newEntity
+newEntityFromList :: [Entity -> Entity] -> Entity
+newEntityFromList = foldl (\ arg x -> x arg) newEntity
+
+addEntity :: Entity -> Game -> Game
+addEntity entity = second (entity :)
 
 {-
     System:
@@ -57,48 +69,50 @@ newEntityFromList list = attachSystems list newEntity
 -}
 type System = Entity -> ([IO ()], Entity)
 
-attachSystem :: SystemKey -> Component -> Entity -> Entity
-attachSystem key comp entity = insert key newComponentList entity
-    where 
-        newComponentList = oldComponentList ++ [comp]
-        oldComponentList = findWithDefault [] key entity
+-- TODO figure out how to remove derp
+concatIO :: [Component] -> Entity -> [IO ()]
+concatIO components entity = foldr derp [] results
+    where
+        derp result lst = lst ++ fst result
+        results = map (`stripComponent` entity) components
 
-attachSystems :: [(SystemKey, Component)] -> Entity -> Entity
-attachSystems list entity = foldr (uncurry attachSystem) entity list 
-
--- Private
-iterSysComps :: [Component] -> System
-iterSysComps (x:xs) entity = first ( fst iter ++ ) others
-    where 
-        iter = stripComponent x entity
-        others = iterSysComps xs (snd iter)
-iterSysComps [] entity = ([], entity)
 
 -- Private
-runSystem :: SystemKey -> System
-runSystem key entity = iterSysComps componentList entity
-    where componentList = findWithDefault [] key entity
+runSystem :: SystemKey -> Entity -> ([IO ()], Entity)
+runSystem key entity = stripComponent (head components) entity
+    where components = findWithDefault [] key entity
 
 {-
     Game:
     List of entities which can be filtered with system boolean map. Entities will then
     used their captured lambdas to perform the work of the game.
 -}
-type Game = [Entity]
+type Game = ([SystemKey], [Entity])
 
 newGame :: Game
-newGame = []
+newGame = ([], [])
 
-run1Frame :: [SystemKey] -> Game -> ([IO ()], Game)
-run1Frame (x:xs) game = first ( fst iter ++ ) others
-    where
-        iter = concatTplList (map (runSystem x) game)
-        others = run1Frame xs (snd iter)
+runFrame :: Game -> ([IO ()], [Entity])
+runFrame = uncurry runFrameCurried
 
-run1Frame [] game = ([], game)
-
-dumpMetadata :: Game -> [Char]
+dumpMetadata :: Game -> String
 dumpMetadata = concatMap show
+
+runGame :: Game -> IO ()
+runGame game = do {
+    (io, entities) <- return (runFrame game);
+    foldr (>>) (pure ()) io;
+    runGame (fst game, entities)
+}
+
+-- Private
+runFrameCurried :: [SystemKey] -> [Entity] -> ([IO ()], [Entity])
+runFrameCurried (x:xs) entities = first ( fst iter ++ ) others
+    where
+        iter = concatTplList (map (runSystem x) entities)
+        others = runFrameCurried xs (snd iter)
+
+runFrameCurried [] entities = ([], entities)
 
 {-
     Component:
@@ -119,6 +133,21 @@ instance Eq Component where
     (==) ( METADATA msg a ) (METADATA msg1 b ) = (&&) ((==) msg msg1) ((==) a b)
     (==) ( COMPONENT _ ) (COMPONENT _ ) = True
     (==) _ _ = False
+
+insertComponent :: SystemKey -> [Component] -> Entity -> Entity
+insertComponent = insert
+
+insertComponents :: [(SystemKey, [Component])] -> Entity -> Entity
+insertComponents list entity = foldr (uncurry insertComponent) entity list
+
+adjustDefaultComponent :: SystemKey -> [Component] -> [Component] -> Entity -> Entity
+adjustDefaultComponent key addition defaultEntry entity = insert key newComponentList entity
+    where
+        newComponentList = oldComponentList ++ addition
+        oldComponentList = findWithDefault defaultEntry key entity
+
+adjustComponent :: SystemKey -> [Component] -> Entity -> Entity
+adjustComponent key components = adjust (++ components) key
 
 -- Private
 stripComponent :: Component -> System
