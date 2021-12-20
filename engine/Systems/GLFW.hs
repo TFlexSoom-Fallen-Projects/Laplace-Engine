@@ -1,4 +1,4 @@
-module Systems.Input (
+module Systems.GLFW (
     newGLFW,
     addGLFW,
     enableGLFW
@@ -6,12 +6,13 @@ module Systems.Input (
 
 import Data.Map(findWithDefault)
 import Graphics.UI.GLFW ( Window )
+import Dynamic (Dynamic, DynamicallyAware(..), DynamicHolder(..))
 import Engine (
     SystemKey,
     enableSystem,
     Entity,
     System,
-    concatIO,
+    SystemOutput(..),
     Game,
     Component(..),
     insertComponent,
@@ -30,22 +31,22 @@ glfwKey = "glfwSys"
 newGLFW :: Entity -> Entity
 newGLFW = insertComponent glfwKey glfwDefault
 
+-- TODO Fix
 addGLFW :: Entity -> Entity 
-addGLFW = adjustDefaultComponent glfwKey [METADATA "GLFW Context" (COMPONENT glfw)] glfwDefault
+addGLFW = adjustDefaultComponent glfwKey [] glfwDefault
 
 enableGLFW :: Game -> Game 
-enableGLFW = enableSystem glfwKey
+enableGLFW = enableSystem glfwKey glfw
 
 -- Implmentation
 
 glfwDefault :: [Component]
-glfwDefault = [METADATA "GLFW System Base" (COMPONENT glfwBase)]
-
--- TODO , Don't concat IO directly for this system
-glfwBase :: System
-glfwBase entity = (concatIO (tail components) entity, entity)
-    where components = findWithDefault [] glfwKey entity 
+glfwDefault = [VALUE (toDyn "Hello World")]
 
 -- TODO Fix
 glfw :: System
-glfw entity = ([], entity)
+glfw comps = SystemOutput {
+    io = [],
+    entity = comps,
+    new = []
+}

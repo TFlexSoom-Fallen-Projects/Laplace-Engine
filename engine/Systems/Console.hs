@@ -5,14 +5,15 @@ module Systems.Console (
 ) where
 
 import Data.Map(findWithDefault)
+import Dynamic (Dynamic, DynamicallyAware(..), DynamicHolder(..))
 import Engine (
     SystemKey,
     enableSystem,
     Entity,
     System,
-    concatIO,
     Game,
     Component(..),
+    SystemOutput(..),
     insertComponent,
     adjustDefaultComponent)
 
@@ -28,19 +29,25 @@ newConsole :: Entity -> Entity
 newConsole = insertComponent consoleKey consoleDefault
 
 addMessage :: String -> Entity -> Entity
-addMessage msg = adjustDefaultComponent consoleKey [METADATA "Console Message" (COMPONENT (console msg))] consoleDefault
+addMessage msg = adjustDefaultComponent consoleKey [VALUE (toDyn msg)] consoleDefault
 
-enableConsole :: Game -> Game 
-enableConsole = enableSystem consoleKey
+enableConsole :: Game -> Game
+enableConsole =  enableSystem consoleKey console
 
 -- Implementation
 
 consoleDefault :: [Component]
-consoleDefault = [METADATA "Console System Base" (COMPONENT consoleBase)]
+consoleDefault = [VALUE (toDyn "Hello World")]
 
-consoleBase :: System
-consoleBase entity = (concatIO (tail components) entity, entity)
-    where components = findWithDefault [] consoleKey entity
+concatValues :: [Component] -> String
+concatValues = concatMap cast
+    where 
+        cast (VALUE c) = fromDyn c
+        cast _ = ""
 
-console :: String -> System
-console msg entity = ([putStrLn msg], entity)
+console :: System
+console comps = SystemOutput {
+    io = [putStrLn (concatValues comps)],
+    entity = comps,
+    new = []
+}

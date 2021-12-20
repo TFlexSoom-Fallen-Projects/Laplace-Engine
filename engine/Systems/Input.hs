@@ -5,12 +5,13 @@ module Systems.Input (
 ) where
 
 import Data.Map(findWithDefault)
+import Dynamic (Dynamic, DynamicallyAware(..), DynamicHolder(..))
 import Engine (
     SystemKey,
     enableSystem,
     Entity,
     System,
-    concatIO,
+    SystemOutput(..),
     Game,
     Component(..),
     insertComponent,
@@ -26,27 +27,28 @@ inputKey = "inputSys"
 
 -- Interface
 
+-- TODO make instance of DynamicallyAware
 data InputType = BUTTON | RANGE_1D | RANGE_2D | RANGE_3D | ENCODED
     deriving Show
 
 newInput :: Entity -> Entity
 newInput = insertComponent inputKey inputDefault
 
+-- TODO FIX
 addInput :: InputType -> Entity -> Entity 
-addInput t = adjustDefaultComponent inputKey [METADATA "Input Listener" (COMPONENT (input t))] inputDefault
+addInput t = adjustDefaultComponent inputKey [] inputDefault
 
 enableInput :: Game -> Game 
-enableInput = enableSystem inputKey
+enableInput = enableSystem inputKey input
 
 -- Implmentation
 
 inputDefault :: [Component]
-inputDefault = [METADATA "Input System Base" (COMPONENT inputBase)]
+inputDefault = [VALUE (toDyn "Hello World")]
 
-inputBase :: System
-inputBase entity = (concatIO (tail components) entity, entity)
-    where components = findWithDefault [] inputKey entity 
-
-input :: InputType -> System
-input BUTTON entity = ([putStrLn "Mouse Input Used"], entity)
-input _      entity = ([putStrLn "Unknown Input Used"], entity)
+input :: System
+input comps = SystemOutput {
+    io = [putStrLn "Mouse Input Used!"],
+    entity = comps,
+    new = []
+}

@@ -6,11 +6,10 @@ module Engine (
     newEntityFromList,
     addEntity,
     System,
-    concatIO,
+    SystemOutput(..),
     Game,
     newGame,
     runFrame,
-    dumpMetadata,
     runGame,
     Component(..),
     insertComponent,
@@ -19,16 +18,16 @@ module Engine (
     adjustComponent
 ) where
 
-import Data.Bifunctor(first, second)
+import Data.Bifunctor(first, second, bimap)
 import Data.Foldable(concatMap)
-import Data.Map (Map, empty, findWithDefault, insert, member, fromList, adjust)
+import Data.Map (Map, empty, findWithDefault, insert, member, fromList, adjust, foldrWithKey)
 import qualified Data.Map as Map
 import Data.Maybe(mapMaybe)
 
-import Util (concatTplList)
-import Data.Graph (components)
+import Dynamic (Dynamic, DynamicallyAware, DynamicHolder)
 
 -- | Module Definition for Laplace-Engine
+-- TODO should have I have Runtime Defined Modules?
 
 {- 
     SystemKey: 
@@ -37,8 +36,9 @@ import Data.Graph (components)
 -}
 type SystemKey = String
 
-enableSystem :: String -> Game -> Game
-enableSystem key = first (key :)
+enableSystem :: String -> System -> Game -> Game
+enableSystem key sys g = replaceSystems g newSystems
+    where newSystems = insert key sys (systems g)
 
 {-
     Entity:
@@ -55,7 +55,7 @@ newEntityFromList :: [Entity -> Entity] -> Entity
 newEntityFromList = foldl (\ arg x -> x arg) newEntity
 
 addEntity :: Entity -> Game -> Game
-addEntity entity = second (entity :)
+addEntity entity g = replaceEntities g (entities g ++ [entity])
 
 {-
     System:
@@ -65,54 +65,74 @@ addEntity entity = second (entity :)
 
     *Laws:*
     1. Every System should have a SystemKey
-    2. Every System should have a way to attach to the Entity or a Component Form
 -}
-type System = Entity -> ([IO ()], Entity)
-
--- TODO figure out how to remove derp
-concatIO :: [Component] -> Entity -> [IO ()]
-concatIO components entity = foldr derp [] results
-    where
-        derp result lst = lst ++ fst result
-        results = map (`stripComponent` entity) components
-
-
--- Private
-runSystem :: SystemKey -> Entity -> ([IO ()], Entity)
-runSystem key entity = stripComponent (head components) entity
-    where components = findWithDefault [] key entity
+data SystemOutput = SystemOutput {
+    io :: [IO ()],
+    entity :: [Component],
+    new :: [Entity]
+}
+type System = [Component] -> SystemOutput
 
 {-
     Game:
     List of entities which can be filtered with system boolean map. Entities will then
     used their captured lambdas to perform the work of the game.
 -}
-type Game = ([SystemKey], [Entity])
+data Game = Game {
+    systems :: Map SystemKey System,
+    entities :: [Entity]
+}
 
 newGame :: Game
-newGame = ([], [])
+newGame = Game {
+    systems=empty,
+    entities=[]
+}
 
-runFrame :: Game -> ([IO ()], [Entity])
-runFrame = uncurry runFrameCurried
+replaceSystems :: Game -> Map SystemKey System -> Game
+replaceSystems g sys = Game {
+    systems = sys,
+    entities = entities g
+}
 
-dumpMetadata :: Game -> String
-dumpMetadata = concatMap show
+replaceEntities :: Game -> [Entity] -> Game
+replaceEntities g e = Game {
+    systems = systems g,
+    entities = e
+}
 
 runGame :: Game -> IO ()
 runGame game = do {
-    (io, entities) <- return (runFrame game);
+    (io, modifiedGame) <- return (runFrame game);
     foldr (>>) (pure ()) io;
-    runGame (fst game, entities)
+    runGame modifiedGame
 }
 
--- Private
-runFrameCurried :: [SystemKey] -> [Entity] -> ([IO ()], [Entity])
-runFrameCurried (x:xs) entities = first ( fst iter ++ ) others
-    where
-        iter = concatTplList (map (runSystem x) entities)
-        others = runFrameCurried xs (snd iter)
+runFrame :: Game -> ([IO ()], Game)
+runFrame g = second (replaceEntities g) result
+    where result = foldrWithKey runSystemOnEntities ([], entities g) (systems g)
 
-runFrameCurried [] entities = ([], entities)
+-- Private
+
+runSystemOnEntities :: SystemKey -> System -> ([IO ()], [Entity]) -> ([IO ()], [Entity])
+runSystemOnEntities k sys (io, es) = first (io ++) result
+    where
+        result = foldr cumulator ([], []) es
+        cumulator e (io', es') = bimap (io' ++) (es' ++) (process e)
+        process = runSystem k sys
+
+
+-- TODO if key doesn't exist then don't run system
+-- Private
+runSystem :: SystemKey -> System -> Entity -> ([IO ()], [Entity])
+runSystem key sys e = (io systemOutput, entities)
+    where
+        entities = e : new systemOutput
+        newEntity = insert key (entity systemOutput) e
+        systemOutput = sys components
+        components = findWithDefault [] key e
+
+
 
 {-
     Component:
@@ -122,17 +142,15 @@ runFrameCurried [] entities = ([], entities)
     against its own cardinality. A System has no state without a Component. An Entity carries 
     a Component.
 -}
-data Component = METADATA String Component | COMPONENT System
 
-instance Show Component where
-    show ( METADATA msg a ) = (++) taggedMetadata (show a)
-        where taggedMetadata = (++) ((++) "x" msg) ">"
-    show ( COMPONENT a ) = "{System}"
+type Component = DynamicHolder
 
-instance Eq Component where
-    (==) ( METADATA msg a ) (METADATA msg1 b ) = (&&) ((==) msg msg1) ((==) a b)
-    (==) ( COMPONENT _ ) (COMPONENT _ ) = True
-    (==) _ _ = False
+-- instance Show Component where
+--     show c = show $ metadata c
+
+-- instance Eq Component where
+--     (==) c c' = metadata c == metadata c' && value c == value c'
+
 
 insertComponent :: SystemKey -> [Component] -> Entity -> Entity
 insertComponent = insert
@@ -149,7 +167,3 @@ adjustDefaultComponent key addition defaultEntry entity = insert key newComponen
 adjustComponent :: SystemKey -> [Component] -> Entity -> Entity
 adjustComponent key components = adjust (++ components) key
 
--- Private
-stripComponent :: Component -> System
-stripComponent ( METADATA _ a ) = stripComponent a
-stripComponent ( COMPONENT a ) = a

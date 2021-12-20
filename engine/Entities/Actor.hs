@@ -8,4 +8,4 @@ import Systems.Console(newConsole, addMessage)
 -- | Pre-made Actor Entity
 
 actor :: Entity
-actor = newEntityFromList [newConsole, addMessage "Hello World"]
+actor = newEntityFromList [newConsole, addMessage "This is an Actor!"]

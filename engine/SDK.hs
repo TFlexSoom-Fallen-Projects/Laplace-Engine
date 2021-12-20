@@ -5,7 +5,6 @@ module SDK (
     Game,
     newGame,
     runFrame,
-    dumpMetadata,
     runGame
 ) where
 
@@ -17,5 +16,4 @@ import Engine(
     Game,
     newGame,
     runFrame,
-    dumpMetadata,
     runGame)
