@@ -9,13 +9,13 @@ import Dynamic (Dynamic, DynamicallyAware(..), DynamicHolder(..))
 import Engine (
     SystemKey,
     enableSystem,
-    Entity,
+    Entity(..),
+    newEntity,
     System,
     Game,
     Component(..),
     SystemOutput(..),
-    insertComponent,
-    adjustDefaultComponent)
+    replaceComponent)
 
 -- | Console System that prints out a "name"
 
@@ -26,28 +26,26 @@ consoleKey = "ConSys"
 -- Interface
 
 newConsole :: Entity -> Entity
-newConsole = insertComponent consoleKey consoleDefault
+newConsole = replaceComponent consoleKey consoleDefault
 
 addMessage :: String -> Entity -> Entity
-addMessage msg = adjustDefaultComponent consoleKey [VALUE (toDyn msg)] consoleDefault
+addMessage msg = replaceComponent consoleKey (VALUE (toDyn msg))
 
 enableConsole :: Game -> Game
 enableConsole =  enableSystem consoleKey console
 
 -- Implementation
 
-consoleDefault :: [Component]
-consoleDefault = [VALUE (toDyn "Hello World")]
+consoleDefault :: Component
+consoleDefault = VALUE (toDyn "Hello World")
 
-concatValues :: [Component] -> String
-concatValues = concatMap cast
-    where 
-        cast (VALUE c) = fromDyn c
-        cast _ = ""
+cast :: Component -> String
+cast (VALUE c) = fromDyn c
+cast _         = ""
 
 console :: System
-console comps = SystemOutput {
-    io = [putStrLn (concatValues comps)],
-    entity = comps,
+console comp = SystemOutput {
+    io = [putStrLn (cast comp)],
+    component = comp,
     new = []
 }

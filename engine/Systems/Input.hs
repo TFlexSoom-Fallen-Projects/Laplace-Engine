@@ -1,7 +1,7 @@
 module Systems.Input (
-    newInput,
-    addInput,
-    enableInput
+    -- newInput,
+    -- addInput,
+    -- enableInput
 ) where
 
 import Data.Map(findWithDefault)
@@ -13,11 +13,7 @@ import Engine (
     System,
     SystemOutput(..),
     Game,
-    Component(..),
-    insertComponent,
-    insertComponents,
-    adjustDefaultComponent,
-    adjustComponent)
+    Component(..))
 
 -- | Input Systems for Keys, Joysticks, Buttons, etc.
 
@@ -31,24 +27,24 @@ inputKey = "inputSys"
 data InputType = BUTTON | RANGE_1D | RANGE_2D | RANGE_3D | ENCODED
     deriving Show
 
-newInput :: Entity -> Entity
-newInput = insertComponent inputKey inputDefault
+-- newInput :: Entity -> Entity
+-- newInput = insertComponent inputKey inputDefault
 
--- TODO FIX
-addInput :: InputType -> Entity -> Entity 
-addInput t = adjustDefaultComponent inputKey [] inputDefault
+-- -- TODO FIX
+-- addInput :: InputType -> Entity -> Entity 
+-- addInput t = adjustDefaultComponent inputKey [] inputDefault
 
-enableInput :: Game -> Game 
-enableInput = enableSystem inputKey input
+-- enableInput :: Game -> Game 
+-- enableInput = enableSystem inputKey input
 
--- Implmentation
+-- -- Implmentation
 
-inputDefault :: [Component]
-inputDefault = [VALUE (toDyn "Hello World")]
+-- inputDefault :: [Component]
+-- inputDefault = [VALUE (toDyn "Hello World")]
 
-input :: System
-input comps = SystemOutput {
-    io = [putStrLn "Mouse Input Used!"],
-    entity = comps,
-    new = []
-}
+-- input :: System
+-- input comps = SystemOutput {
+--     io = [putStrLn "Mouse Input Used!"],
+--     entity = comps,
+--     new = []
+-- }

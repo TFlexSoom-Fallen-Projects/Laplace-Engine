@@ -1,19 +1,19 @@
 module SDK (
-    newEntity,
+    Creatable,
+    Entity,
     newEntityFromList,
     addEntity,
     Game,
-    newGame,
     runFrame,
     runGame
 ) where
 
 -- | Used to Isolate individaul functions from The Engine as a public interface.
 import Engine(
-    newEntity,
+    Creatable,
+    Entity,
     newEntityFromList,
     addEntity,
     Game,
-    newGame,
     runFrame,
     runGame)

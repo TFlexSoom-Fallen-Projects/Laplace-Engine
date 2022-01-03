@@ -10,7 +10,7 @@ Structure Modelled off of: [Haskelleton](http://taylor.fausak.me/2014/03/04/hask
 # Build From Source
 0. Install the [The Cabal Build System with GHC](https://www.haskell.org/downloads/#platform)
 1. `git clone https://github.com/TFlexSoom/Laplace-Engine`
-2. `cabal build`
+2. `cabal build --allow-newer`
 3. Executable will be located in `dist-newstyle\build\x86_64-windows\ghc-8.10.2\Laplace-Engine-0.0.0\x\Laplace-Engine\build\Laplace-Engine\Laplace-Engine.exe`
 
 ## Run with cabal
