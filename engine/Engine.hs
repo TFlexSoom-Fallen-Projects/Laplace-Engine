@@ -35,13 +35,13 @@ module Engine (
     -- * System
     -- $system
     SystemKey,
-    enableSystem,
     System,
     SystemOutput(..),
 
     -- * Game
     -- $game
     Game(..),
+    enableSystem,
     runFrame,
     runGame
 ) where
@@ -74,9 +74,15 @@ class Mergeable a where
     -- | Merges first two instances and outputs the combinations
     merge :: a -> a -> a
 
+instance Mergeable a => Mergeable ( Maybe a ) where
+    merge (Just a) (Just b) = Just (merge a b)
+    merge (Just a) _ = Just a
+    merge _ (Just b) = Just b
+    merge _ _ = Nothing
+
 -- | Use to assert that when 2 maps Merge they do not collide
 mergeUnsafe :: Ord k => Map.Map k a -> Map.Map k a -> Map.Map k a
-mergeUnsafe = Map.unionWith (error "Key Collision")
+mergeUnsafe = Map.unionWith (error "Key Collision Union")
 
 {-$component
     =__Component:__
@@ -144,8 +150,18 @@ instance Mergeable Entity where
 getComponent :: SystemKey -> Entity -> Component
 getComponent k e = (!) (components e) k
 
-replaceComponent :: SystemKey -> Component -> Entity -> Entity
-replaceComponent k c e = e {components = Map.insert k c (components e)}
+addComponentWith :: (Component -> Component -> Component)
+    -> SystemKey -> Component -> Entity -> Entity
+addComponentWith lambda k c e = replaceComponent (Map.insertWith lambda k c (components e)) e
+
+addComponent :: SystemKey -> Component -> Entity -> Entity
+addComponent = addComponentWith const
+
+addComponentAssert :: SystemKey -> Component -> Entity -> Entity
+addComponentAssert = addComponentWith (error "Key Collision Insert")
+
+replaceComponent :: Map.Map SystemKey Component -> Entity -> Entity
+replaceComponent comps e = e{components = comps}
 
 replaceMessages :: Message -> Entity -> Entity
 replaceMessages msg e = e{messages=msg}
@@ -154,7 +170,7 @@ newEntityFromList :: [Entity -> Entity] -> Entity
 newEntityFromList = foldl (\ arg x -> x arg) new
 
 singletonEntity :: SystemKey -> Component -> Entity
-singletonEntity k c = replaceComponent k c new
+singletonEntity k c = replaceComponent (Map.insert k c Map.empty) new
 
 addProducer :: MessageKey -> Component -> Entity -> Entity
 addProducer k comp e =  replaceMessages newMessage e
@@ -200,45 +216,40 @@ type System = Component -> SystemOutput
 -}
 type SystemKey = String
 
-enableSystem :: String -> System -> Game -> Game
-enableSystem key sys g = replaceSystems newSystems g
-    where newSystems = Map.insert key sys (systems g)
-
-data SystemOutput = SystemOutput {
+data EngineJob = EngineJob {
     io :: [IO ()],
-    modified :: Maybe Component,
     messages :: Message,
     added :: [Entity],
     delete :: Bool
 }
 
-instance Creatable SystemOutput where
-    new = SystemOutput {
+instance Creatable EngineJob where
+    new = EngineJob {
         io = [],
-        modified = Nothing,
         messages = new,
         added = [],
         delete = False
     }
 
-instance Mergeable SystemOutput where
-    merge out out' = SystemOutput {
-        io = io out ++ io out',
-        modified = case modified out' of 
-            Nothing -> modified out
-            _ -> modified out',
-        messages = merge (messages (out :: SystemOutput)) (messages (out' :: SystemOutput)),
-        added = added out ++ added out',
-        delete = delete out || delete out'
+instance Mergeable EngineJob where
+    merge job job' = job {
+        io = io job ++ io job',
+        messages = merge (messages (job :: EngineJob)) (messages (job' :: EngineJob)),
+        added = added job ++ added job',
+        delete = delete job || delete job'
     }
 
-instance Mergeable a => Mergeable ( Maybe a ) where
-    merge (Just a) (Just b) = Just (merge a b)
-    merge (Just a) _ = Just a
-    merge _ (Just b) = Just b
-    merge _ _ = Nothing
 
+data SystemOutput = SystemOutput {
+    modified :: Maybe Component,
+    job :: EngineJob
+}
 
+instance Creatable SystemOutput where
+    new = SystemOutput {
+        modified = Nothing,
+        job = new
+    }
 
 {-$game
     =__Game:__
@@ -262,6 +273,10 @@ instance Mergeable Game where
         entities = entities g ++ entities g'
     }
 
+enableSystem :: String -> System -> Game -> Game
+enableSystem key sys g = replaceSystems newSystems g
+    where newSystems = Map.insert key sys (systems g)
+
 replaceSystems :: Map.Map SystemKey System -> Game -> Game
 replaceSystems sys g = g{systems = sys}
 
@@ -284,8 +299,8 @@ runFrame g = (fst result, replaceEntities (snd result) g)
         es = entities g
         bindedEntities k m = runSystemOnEntities k m es
         matrixOfOutputs = Map.mapWithKey bindedEntities (systems g)
-        merged = mergeOutputs matrixOfOutputs
-        result = outputsToNewFrame es merged
+        merged = mergeOutputs es matrixOfOutputs
+        result = outputsToNewFrame merged
 
 -- Private
 runSystemOnEntities :: SystemKey -> System -> [Entity] -> [Maybe SystemOutput]
@@ -298,22 +313,54 @@ runSystem key sys Entity{components=comps}
     | otherwise = Nothing
     where component = (!) comps key
 
-
 -- Private
 -- TODO use Traversable instead of Map?
-mergeOutputs :: Map.Map SystemKey [Maybe SystemOutput] -> [Maybe SystemOutput]
-mergeOutputs = Map.foldr' (zipWith merge) (repeat Nothing)
+mergeOutputs :: [Entity] -> Map.Map SystemKey [Maybe SystemOutput] -> [EntityResolver]
+mergeOutputs es = Map.foldrWithKey' zipper (map createResolver es)
+    where zipper k = zipWith (mergeResolver k)
+
+--Private
+data EntityResolver = EntityResolver {
+    modified :: Entity,
+    job :: EngineJob
+}
 
 -- Private
-mergeComponents :: [Entity] -> [Entity] -> [Entity]
-mergeComponents = zipWith merge
+createResolver :: Entity -> EntityResolver
+createResolver e = EntityResolver {
+    modified = e,
+    job = new
+}
 
+-- Private
+mergeResolver :: SystemKey -> Maybe SystemOutput -> EntityResolver -> EntityResolver
+mergeResolver k (Just SystemOutput{modified=(Just comp), job=outJobs}) res =
+    res {
+        modified = addComponentAssert k comp (modified (res :: EntityResolver)),
+        job = merge (job (res :: EntityResolver)) outJobs
+    }
+
+-- Private
 resolveMessages :: [Entity] -> [Entity]
 resolveMessages = map resolveMessage
 
+-- Private
 resolveMessage :: Entity -> Entity
 resolveMessage e = e
 
--- TODO
-outputsToNewFrame :: [Entity] -> [Maybe SystemOutput] -> ([IO ()], [Entity])
-outputsToNewFrame es outs = ([], [])
+-- Private
+outputsToNewFrame :: [EntityResolver] -> ([IO ()], [Entity])
+outputsToNewFrame = foldr outputToNewFrame ([], [])
+
+-- Private
+outputToNewFrame :: EntityResolver -> ([IO ()], [Entity]) -> ([IO ()], [Entity])
+outputToNewFrame EntityResolver{modified=mod, job=j} (ios, es) = (ios', es')
+    where
+        ios' = ios ++ io j
+        es' = if delete j then added j else mod : added j
+
+
+-- Private
+modEntityTpl :: Entity -> Maybe SystemOutput -> ([IO ()], [Entity])
+-- modEntityTpl e (Just out) = (io out, [])
+modEntityTpl e _ = ([], [e])
