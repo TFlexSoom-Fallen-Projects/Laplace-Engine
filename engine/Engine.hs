@@ -1,4 +1,4 @@
-{-# OPTIONS_GHC -Wno-deferred-out-of-scope-variables #-}
+{-# LANGUAGE DuplicateRecordFields #-}
 -- |Engine for running the Game containers. Users should be submitting configurations 
 -- of Game Objects to the Engine module to be run infinitely. See 'runGame'!
 --
@@ -15,6 +15,11 @@ module Engine (
     -- $component
     Component(..),
 
+    -- * Message
+    -- $message
+    MessageKey,
+    Message,
+
     -- * Entity
     -- $entity
     Entity,
@@ -23,11 +28,9 @@ module Engine (
     getComponent,
     replaceComponent,
     singletonEntity,
-    MessageKey,
     addProducer,
     addConsumers,
     addConsumer,
-    markForDeletion,
 
     -- * System
     -- $system
@@ -44,9 +47,8 @@ module Engine (
 ) where
 
 -- Base Imports
+import Data.Map((!))
 import qualified Data.Map as Map
-import qualified Data.Set as Set
-import Data.Maybe(mapMaybe)
 
 -- Rewritten Dynamic Wheel for Heterogeneous lists
 import Dynamic (Dynamic, DynamicallyAware, DynamicHolder)
@@ -73,7 +75,7 @@ class Mergeable a where
     merge :: a -> a -> a
 
 -- | Use to assert that when 2 maps Merge they do not collide
-mergeUnsafe :: Map.Map k a -> Map.Map k a -> Map.Map k a
+mergeUnsafe :: Ord k => Map.Map k a -> Map.Map k a -> Map.Map k a
 mergeUnsafe = Map.unionWith (error "Key Collision")
 
 {-$component
@@ -87,6 +89,35 @@ mergeUnsafe = Map.unionWith (error "Key Collision")
 
 type Component = DynamicHolder
 
+-- TODO For MessageKey and SystemKey --> 64 bit ints would be more optimal than Strings
+type MessageKey = String
+
+{-$message
+    =__Message:__
+    Messages are a way for systems to communicate data to eachother within the frame/iteration. I many cases,
+    systems can couple/communicate with other systems by creating entities with respective components. For all
+    work on entities that are needed outside of the scope of the system, Messages provide a way to interface
+    without coupling with these other systems: producing and interface with 'producers' or consuming
+    an interface with 'consumers'
+
+-}
+data Message = Message {
+    producers :: Map.Map MessageKey Component,
+    consumers :: Map.Map MessageKey [System]
+}
+
+instance Creatable Message where
+    new = Message {
+        producers = Map.empty,
+        consumers = Map.empty
+    }
+
+instance Mergeable Message where
+    merge m m' = m {
+        producers = mergeUnsafe (producers m) (producers m'),
+        consumers = Map.unionWith (++) (consumers m) (consumers m')
+    }
+
 {-$entity
     =__Entity:__
     Data Holder
@@ -94,75 +125,62 @@ type Component = DynamicHolder
     Holds possible callstack of previous System Actions (Component)
 -}
 data Entity = Entity{
-    frameID :: FrameID,
     components :: Map.Map SystemKey Component,
-    producers :: Map.Map MessageKey Component,
-    consumers :: Map.Map MessageKey [System],
-    delete :: Bool
+    messages :: Message
 }
-
-{-|
-    ==__FrameID:__
-    Key to verify entities merge together correctly inbetween frames/operations
--}
-type FrameID = Int
-
--- TODO For MessageKey and SystemKey --> 64 bit ints would be more optimal than Strings
-type MessageKey = String
-
 
 instance Creatable Entity where
     new = Entity{
-        frameID = 0,
         components = Map.empty,
-        producers = Map.empty,
-        consumers = Map.empty,
-        delete = False
+        messages = new
     }
 
 instance Mergeable Entity where
     merge e e' = e{
         components = mergeUnsafe (components e) (components e'),
-        producers = mergeUnsafe (producers e) (producers e'),
-        consumers = mergeUnsafe (consumers e) (consumers e'),
-        delete = delete e || delete e'
+        messages = merge (messages (e :: Entity)) (messages (e' :: Entity))
     }
 
-instance Ord Entity where
-    (<=) e e' = (<=) (frameID e) (frameID e')
-
 getComponent :: SystemKey -> Entity -> Component
-getComponent k e = (!) k (components e)
+getComponent k e = (!) (components e) k
 
 replaceComponent :: SystemKey -> Component -> Entity -> Entity
 replaceComponent k c e = e {components = Map.insert k c (components e)}
 
+replaceMessages :: Message -> Entity -> Entity
+replaceMessages msg e = e{messages=msg}
+
 newEntityFromList :: [Entity -> Entity] -> Entity
-newEntityFromList = foldl (\ arg x -> x arg) newEntity
+newEntityFromList = foldl (\ arg x -> x arg) new
 
 singletonEntity :: SystemKey -> Component -> Entity
 singletonEntity k c = replaceComponent k c new
 
--- private
-replaceFrameID :: FrameID -> Entity -> Entity
-replaceFrameID id e = e{frameID = id}
-
 addProducer :: MessageKey -> Component -> Entity -> Entity
-addProducer k comp e = e{producers = Map.insertWith assertion k comp (producers e)}
-    where assertion = Error "Producer already exists!"
+addProducer k comp e =  replaceMessages newMessage e
+    where newMessage = msgAddProducer k comp (messages (e :: Entity))
+
+msgAddProducer :: MessageKey -> Component -> Message -> Message
+msgAddProducer k comp msg = msg{producers = Map.insertWith assertion k comp (producers msg)}
+    where assertion = error "Producer already exists!"
 
 addConsumers :: MessageKey -> [System] -> Entity -> Entity
-addConsumers k systems e = e{consumers = Map.insert k newCons consMap}
-    where 
-        consMap = consumers e
-        cons = Map.findWithDefault [] k consMap
-        newCons = cons ++ systems
+addConsumers k systems e = replaceMessages newMessage e
+    where newMessage = msgAddConsumers k systems (messages (e :: Entity))
 
 addConsumer :: MessageKey -> System -> Entity -> Entity
 addConsumer k sys = addConsumers k [sys]
 
-markForDeletion :: Entity -> Entity
-markForDeletion e = e{delete = True}
+-- Private
+msgAddConsumers :: MessageKey -> [System] -> Message -> Message
+msgAddConsumers k systems msg = msg{consumers = Map.insert k newCons consMap}
+    where
+        consMap = consumers msg
+        cons = Map.findWithDefault [] k consMap
+        newCons = cons ++ systems
+
+msgAddConsumer :: MessageKey -> System -> Message -> Message
+msgAddConsumer k sys = msgAddConsumers k [sys]
 
 {-$system
     =__System:__
@@ -173,7 +191,7 @@ markForDeletion e = e{delete = True}
     ==__Laws:__
     1. Every System should have a SystemKey
 -}
-type System = Entity -> SystemOutput
+type System = Component -> SystemOutput
 
 {-|
     ==__SystemKey: __
@@ -183,28 +201,42 @@ type System = Entity -> SystemOutput
 type SystemKey = String
 
 enableSystem :: String -> System -> Game -> Game
-enableSystem key sys = replaceSystems newSystems
+enableSystem key sys g = replaceSystems newSystems g
     where newSystems = Map.insert key sys (systems g)
 
 data SystemOutput = SystemOutput {
     io :: [IO ()],
-    modified :: Entity,
-    added :: [Entity]
+    modified :: Maybe Component,
+    messages :: Message,
+    added :: [Entity],
+    delete :: Bool
 }
 
 instance Creatable SystemOutput where
     new = SystemOutput {
         io = [],
-        modified = newEntity,
-        added = []
+        modified = Nothing,
+        messages = new,
+        added = [],
+        delete = False
     }
 
 instance Mergeable SystemOutput where
     merge out out' = SystemOutput {
         io = io out ++ io out',
-        modified = modified out `merge` modified out',
-        added = new out ++ new out'
+        modified = case modified out' of 
+            Nothing -> modified out
+            _ -> modified out',
+        messages = merge (messages (out :: SystemOutput)) (messages (out' :: SystemOutput)),
+        added = added out ++ added out',
+        delete = delete out || delete out'
     }
+
+instance Mergeable a => Mergeable ( Maybe a ) where
+    merge (Just a) (Just b) = Just (merge a b)
+    merge (Just a) _ = Just a
+    merge _ (Just b) = Just b
+    merge _ _ = Nothing
 
 
 
@@ -247,36 +279,30 @@ runGame game = do {
 }
 
 runFrame :: Game -> ([IO ()], Game)
-runFrame g = (io' merged, replaceEntities replacements g)
+runFrame g = (fst result, replaceEntities (snd result) g)
     where
-        es = frameIDEntities (entities g)
+        es = entities g
         bindedEntities k m = runSystemOnEntities k m es
-        outputs = mapWithKey bindedEntities (systems g)
-        merged = mergeOutputs outputs
-        ls = Set.toAscList (modified' merged)
-        resolved = resolveMessages ls
-        replacements = resolved ++ added' merged
+        matrixOfOutputs = Map.mapWithKey bindedEntities (systems g)
+        merged = mergeOutputs matrixOfOutputs
+        result = outputsToNewFrame es merged
 
 -- Private
-frameIDEntities :: [Entity] -> [Entity]
-frameIDEntities (e:es) = e{frameID=1 + length es} : frameIDEntities es
+runSystemOnEntities :: SystemKey -> System -> [Entity] -> [Maybe SystemOutput]
+runSystemOnEntities k sys = map (runSystem k sys)
 
 -- Private
-mergeOutputs :: [SystemOutputSet] -> SystemOutputSet
-mergeOutputs = foldr localMerge new
-    where
-        outMod = modified' out
-        resMod = modified' res
-        mergedComps = mergeComponents
-            (Set.toAscList (Set.intersection outMod resMod))
-            (Set.toAscList (Set.intersection resMod outMod))
+runSystem :: SystemKey -> System -> Entity -> Maybe SystemOutput
+runSystem key sys Entity{components=comps}
+    | Map.member key comps = Just (sys component)
+    | otherwise = Nothing
+    where component = (!) comps key
 
-        localMerge out res =
-            res{
-                io' = io' res ++ io' out,
-                modified' = Set.union resMod (Set.fromList mergedComps),
-                added' = added' res ++ added' out
-            }
+
+-- Private
+-- TODO use Traversable instead of Map?
+mergeOutputs :: Map.Map SystemKey [Maybe SystemOutput] -> [Maybe SystemOutput]
+mergeOutputs = Map.foldr' (zipWith merge) (repeat Nothing)
 
 -- Private
 mergeComponents :: [Entity] -> [Entity] -> [Entity]
@@ -288,42 +314,6 @@ resolveMessages = map resolveMessage
 resolveMessage :: Entity -> Entity
 resolveMessage e = e
 
--- Private
-data SystemOutputSet = SystemOutputSet {
-    io' :: [IO ()],
-    modified' :: Set.Set Entity,
-    added' :: [Entity]
-}
-
--- Private
-instance Creatable SystemOutputSet where
-    new = SystemOutputSet { io' = [], modified' = Set.empty, added' = []}
-
--- Private
-runSystemOnEntities :: SystemKey -> System -> [Entity] -> SystemOutputSet
-runSystemOnEntities k sys es = foldr concatSystemOutput new outputs
-    -- foldr is important because of concatSystemOutput's modified creation
-    -- We want to make sure entities are not reversed each iteration
-    where
-        outputs = mapMaybe (runSystem k sys) es
-        clean = cleanSystemRun outputs
-
--- Private
-concatSystemOutput :: SystemOutput -> SystemOutputSet -> SystemOutputSet
-concatSystemOutput
-    SystemOutput{io=io, modified=mod, added=add}
-    SystemOutputSet{io'=ioSet, modified'=modSet, added'=addSet}
-    = SystemOutputSet{
-        io' = ioSet ++ io,
-        modified' = Set.insert mod modSet ,
-        added' = addSet ++ add
-    }
-
--- Private
-runSystem :: SystemKey -> System -> Entity -> Maybe SystemOutput
-runSystem key sys Entity{components=comps, frameID=id}
-    | Map.member key comps = Just (sys entityLens)
-    | otherwise = Nothing
-    where
-        entityLens =  singletonEntity key ((Map.!) comps key) `withFrameID` id
-        withFrameID = flip replaceFrameID
+-- TODO
+outputsToNewFrame :: [Entity] -> [Maybe SystemOutput] -> ([IO ()], [Entity])
+outputsToNewFrame es outs = ([], [])
