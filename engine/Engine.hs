@@ -130,13 +130,13 @@ instance Mergeable Message where
     Holds the attached/acting Systems on the piece of data represented through Map's key
     Holds possible callstack of previous System Actions (Component)
 -}
-data Entity = Entity{
+data Entity = Entity {
     components :: Map.Map SystemKey Component,
     messages :: Message
 }
 
 instance Creatable Entity where
-    new = Entity{
+    new = Entity {
         components = Map.empty,
         messages = new
     }
@@ -167,7 +167,7 @@ replaceMessages :: Message -> Entity -> Entity
 replaceMessages msg e = e{messages=msg}
 
 newEntityFromList :: [Entity -> Entity] -> Entity
-newEntityFromList = foldl (\ arg x -> x arg) new
+newEntityFromList = foldl (\ arg x -> x arg) (new :: Entity)
 
 singletonEntity :: SystemKey -> Component -> Entity
 singletonEntity k c = replaceComponent (Map.insert k c Map.empty) new
@@ -241,15 +241,18 @@ instance Mergeable EngineJob where
 
 
 data SystemOutput = SystemOutput {
-    modified :: Maybe Component,
+    key :: SystemKey,
+    modified :: Component,
     job :: EngineJob
 }
 
-instance Creatable SystemOutput where
-    new = SystemOutput {
-        modified = Nothing,
-        job = new
-    }
+newSystemOutput :: SystemKey -> Component -> SystemOutput
+newSystemOutput k comp = SystemOutput {
+    key = k,
+    modified = comp,
+    job = new :: EngineJob
+    -- TODO ^ This might be better and easier to understand when using class instances
+}
 
 {-$game
     =__Game:__
@@ -300,7 +303,8 @@ runFrame g = (fst result, replaceEntities (snd result) g)
         bindedEntities k m = runSystemOnEntities k m es
         matrixOfOutputs = Map.mapWithKey bindedEntities (systems g)
         merged = mergeOutputs es matrixOfOutputs
-        result = outputsToNewFrame merged
+        resolved = resolveMessages merged
+        result = outputsToNewFrame resolved
 
 -- Private
 runSystemOnEntities :: SystemKey -> System -> [Entity] -> [Maybe SystemOutput]
@@ -316,8 +320,7 @@ runSystem key sys Entity{components=comps}
 -- Private
 -- TODO use Traversable instead of Map?
 mergeOutputs :: [Entity] -> Map.Map SystemKey [Maybe SystemOutput] -> [EntityResolver]
-mergeOutputs es = Map.foldrWithKey' zipper (map createResolver es)
-    where zipper k = zipWith (mergeResolver k)
+mergeOutputs es = Map.foldr' (zipWith mergeResolver) (map createResolver es)
 
 --Private
 data EntityResolver = EntityResolver {
@@ -333,20 +336,26 @@ createResolver e = EntityResolver {
 }
 
 -- Private
-mergeResolver :: SystemKey -> Maybe SystemOutput -> EntityResolver -> EntityResolver
-mergeResolver k (Just SystemOutput{modified=(Just comp), job=outJobs}) res =
+mergeResolver :: Maybe SystemOutput -> EntityResolver -> EntityResolver
+mergeResolver (Just SystemOutput{key=k, modified=comp, job=outJobs}) res =
     res {
         modified = addComponentAssert k comp (modified (res :: EntityResolver)),
         job = merge (job (res :: EntityResolver)) outJobs
     }
 
 -- Private
-resolveMessages :: [Entity] -> [Entity]
-resolveMessages = map resolveMessage
+resolveMessages :: [EntityResolver] -> [EntityResolver]
+resolveMessages = map ((.) resolveMessage assertEmptyConsumers)
 
 -- Private
-resolveMessage :: Entity -> Entity
-resolveMessage e = e
+-- The Final Output Should have empty Consumers
+resolveMessage :: EntityResolver -> EntityResolver
+resolveMessage = id
+
+assertEmptyConsumers :: EntityResolver -> EntityResolver
+assertEmptyConsumers e@(EntityResolver{ job=EngineJob {messages= Message { consumers=c } } }) 
+    | Map.null c = e
+    | otherwise = error "Consumers are Non-Empty!"
 
 -- Private
 outputsToNewFrame :: [EntityResolver] -> ([IO ()], [Entity])
@@ -354,13 +363,5 @@ outputsToNewFrame = foldr outputToNewFrame ([], [])
 
 -- Private
 outputToNewFrame :: EntityResolver -> ([IO ()], [Entity]) -> ([IO ()], [Entity])
-outputToNewFrame EntityResolver{modified=mod, job=j} (ios, es) = (ios', es')
-    where
-        ios' = ios ++ io j
-        es' = if delete j then added j else mod : added j
-
-
--- Private
-modEntityTpl :: Entity -> Maybe SystemOutput -> ([IO ()], [Entity])
--- modEntityTpl e (Just out) = (io out, [])
-modEntityTpl e _ = ([], [e])
+outputToNewFrame EntityResolver{modified=mod, job=EngineJob{io=ioj, added=addedj, delete=False}} (ios, es) = (ios ++ ioj, mod : addedj)
+outputToNewFrame EntityResolver{modified=mod, job=EngineJob{io=ioj, added=addedj, delete=True}} (ios, es) = (ios ++ ioj, addedj)
