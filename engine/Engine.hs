@@ -206,7 +206,12 @@ msgAddConsumer k sys = msgAddConsumers k [sys]
 
     ==__Laws:__
     1. Every System should have a SystemKey
+
+    TODO: For Collision and equivalent systems we need a have a 
+    multi-component input to multi-system output for Systems which Perform on
+    entity relationships
 -}
+-- TODO For Collision
 type System = Component -> SystemOutput
 
 {-|
@@ -302,7 +307,7 @@ runFrame g = (fst result, replaceEntities (snd result) g)
         bindedEntities k m = runSystemOnEntities k m es
         matrixOfOutputs = Map.mapWithKey bindedEntities (systems g)
         merged = mergeOutputs es matrixOfOutputs
-        resolved = resolveMessages merged
+        resolved = resolveEntityMessages merged
         result = outputsToNewFrame resolved
 
 -- Private
@@ -319,7 +324,7 @@ runSystem key sys Entity{components=comps}
 -- Private
 -- TODO use Traversable instead of Map?
 mergeOutputs :: [Entity] -> Map.Map SystemKey [Maybe SystemOutput] -> [EntityResolver]
-mergeOutputs es = Map.foldr' (zipWith mergeResolver) (map createResolver es)
+mergeOutputs es = Map.foldr' (zipWith mergeMaybeResolver) (map createResolver es)
 
 --Private
 data EntityResolver = EntityResolver {
@@ -335,40 +340,51 @@ createResolver e = EntityResolver {
 }
 
 -- Private
-mergeResolver :: Maybe SystemOutput -> EntityResolver -> EntityResolver
-mergeResolver (Just SystemOutput{key=k, modified=comp, job=outJobs}) res =
+mergeMaybeResolver :: Maybe SystemOutput -> EntityResolver -> EntityResolver
+mergeMaybeResolver (Just out@(SystemOutput{key=k, modified=comp, job=outJobs})) = mergeResolver out
+mergeMaybeResolver _ = id
+
+-- Private
+mergeResolver :: SystemOutput -> EntityResolver -> EntityResolver
+mergeResolver SystemOutput{key=k, modified=comp, job=outJobs} res =
     res {
         modified = addComponentAssert k comp (modified (res :: EntityResolver)),
         job = merge (job (res :: EntityResolver)) outJobs
     }
 
 -- Private
-resolveMessages :: [EntityResolver] -> [EntityResolver]
-resolveMessages = map (assertEmptyConsumers . resolveMessage)
+resolveEntityMessages :: [EntityResolver] -> [EntityResolver]
+resolveEntityMessages = map (assertEmptyConsumers . resolveEntityMessage)
 
 -- Private
 -- The Final Output Should have empty Consumers
-resolveMessage :: EntityResolver -> EntityResolver
-resolveMessage 
+resolveEntityMessage :: EntityResolver -> EntityResolver
+resolveEntityMessage
         er@(EntityResolver {
-            modified=e, 
+            modified=e,
             job=j@(EngineJob{
-                    messages= Message {
+                    messages= msg@(Message {
                         producers=p,
                         consumers=c
-                    }
+                    })
             })
-        } ) 
+        } )
     | Map.null c = er
     | Map.null jobsToRes = error "Deadlock. Jobs nonempty with no providers."
-    | otherwise = er
-        where 
+    | otherwise = resolveEntityMessage (foldr mergeResolver newResolver (resolveMessage p jobsToRes))
+        where
             jobsToRes = Map.intersection c p
             unresolved = Map.difference c p
+            newResolver = er{job=j{messages=msg{consumers=unresolved}}} :: EntityResolver
 
+-- Private
+resolveMessage :: Map.Map MessageKey Component -> Map.Map MessageKey [System] -> [SystemOutput]
+resolveMessage producers = Map.foldrWithKey (consumeAndConcat producers) []
+    where consumeAndConcat p k sysArr = (++) (map (\sys -> sys ((!) p k)) sysArr)
 
+-- Private
 assertEmptyConsumers :: EntityResolver -> EntityResolver
-assertEmptyConsumers e@(EntityResolver{ job=EngineJob {messages= Message { consumers=c } } }) 
+assertEmptyConsumers e@(EntityResolver{ job=EngineJob {messages= Message { consumers=c } } })
     | Map.null c = e
     | otherwise = error "Consumers are Non-Empty!"
 
