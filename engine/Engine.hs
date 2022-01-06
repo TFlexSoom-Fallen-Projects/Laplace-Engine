@@ -138,7 +138,7 @@ data Entity = Entity {
 instance Creatable Entity where
     new = Entity {
         components = Map.empty,
-        messages = new
+        messages = new :: Message
     }
 
 instance Mergeable Entity where
@@ -170,7 +170,7 @@ newEntityFromList :: [Entity -> Entity] -> Entity
 newEntityFromList = foldl (\ arg x -> x arg) (new :: Entity)
 
 singletonEntity :: SystemKey -> Component -> Entity
-singletonEntity k c = replaceComponent (Map.insert k c Map.empty) new
+singletonEntity k c = replaceComponent (Map.insert k c Map.empty) (new :: Entity)
 
 addProducer :: MessageKey -> Component -> Entity -> Entity
 addProducer k comp e =  replaceMessages newMessage e
@@ -226,7 +226,7 @@ data EngineJob = EngineJob {
 instance Creatable EngineJob where
     new = EngineJob {
         io = [],
-        messages = new,
+        messages = new :: Message,
         added = [],
         delete = False
     }
@@ -251,7 +251,6 @@ newSystemOutput k comp = SystemOutput {
     key = k,
     modified = comp,
     job = new :: EngineJob
-    -- TODO ^ This might be better and easier to understand when using class instances
 }
 
 {-$game
@@ -332,7 +331,7 @@ data EntityResolver = EntityResolver {
 createResolver :: Entity -> EntityResolver
 createResolver e = EntityResolver {
     modified = e,
-    job = new
+    job = new :: EngineJob
 }
 
 -- Private
@@ -345,12 +344,28 @@ mergeResolver (Just SystemOutput{key=k, modified=comp, job=outJobs}) res =
 
 -- Private
 resolveMessages :: [EntityResolver] -> [EntityResolver]
-resolveMessages = map ((.) resolveMessage assertEmptyConsumers)
+resolveMessages = map (assertEmptyConsumers . resolveMessage)
 
 -- Private
 -- The Final Output Should have empty Consumers
 resolveMessage :: EntityResolver -> EntityResolver
-resolveMessage = id
+resolveMessage 
+        er@(EntityResolver {
+            modified=e, 
+            job=j@(EngineJob{
+                    messages= Message {
+                        producers=p,
+                        consumers=c
+                    }
+            })
+        } ) 
+    | Map.null c = er
+    | Map.null jobsToRes = error "Deadlock. Jobs nonempty with no providers."
+    | otherwise = er
+        where 
+            jobsToRes = Map.intersection c p
+            unresolved = Map.difference c p
+
 
 assertEmptyConsumers :: EntityResolver -> EntityResolver
 assertEmptyConsumers e@(EntityResolver{ job=EngineJob {messages= Message { consumers=c } } }) 
