@@ -35,6 +35,7 @@ module Engine (
     -- * System
     -- $system
     SystemKey,
+    SingleInputSystem,
     System,
     SystemOutput(..),
 
@@ -52,6 +53,7 @@ import qualified Data.Map as Map
 
 -- Rewritten Dynamic Wheel for Heterogeneous lists
 import Dynamic (Dynamic, DynamicallyAware, DynamicHolder)
+import qualified Data.Foldable as Map
 
 -- TODO should have I have Runtime Defined Modules?
 
@@ -109,7 +111,7 @@ type MessageKey = String
 -}
 data Message = Message {
     producers :: Map.Map MessageKey Component,
-    consumers :: Map.Map MessageKey [System]
+    consumers :: Map.Map MessageKey [SingleInputSystem]
 }
 
 instance Creatable Message where
@@ -180,22 +182,22 @@ msgAddProducer :: MessageKey -> Component -> Message -> Message
 msgAddProducer k comp msg = msg{producers = Map.insertWith assertion k comp (producers msg)}
     where assertion = error "Producer already exists!"
 
-addConsumers :: MessageKey -> [System] -> Entity -> Entity
+addConsumers :: MessageKey -> [SingleInputSystem] -> Entity -> Entity
 addConsumers k systems e = replaceMessages newMessage e
     where newMessage = msgAddConsumers k systems (messages (e :: Entity))
 
-addConsumer :: MessageKey -> System -> Entity -> Entity
+addConsumer :: MessageKey -> SingleInputSystem -> Entity -> Entity
 addConsumer k sys = addConsumers k [sys]
 
 -- Private
-msgAddConsumers :: MessageKey -> [System] -> Message -> Message
+msgAddConsumers :: MessageKey -> [SingleInputSystem] -> Message -> Message
 msgAddConsumers k systems msg = msg{consumers = Map.insert k newCons consMap}
     where
         consMap = consumers msg
         cons = Map.findWithDefault [] k consMap
         newCons = cons ++ systems
 
-msgAddConsumer :: MessageKey -> System -> Message -> Message
+msgAddConsumer :: MessageKey -> SingleInputSystem -> Message -> Message
 msgAddConsumer k sys = msgAddConsumers k [sys]
 
 {-$system
@@ -206,13 +208,13 @@ msgAddConsumer k sys = msgAddConsumers k [sys]
 
     ==__Laws:__
     1. Every System should have a SystemKey
-
-    TODO: For Collision and equivalent systems we need a have a 
-    multi-component input to multi-system output for Systems which Perform on
-    entity relationships
 -}
--- TODO For Collision
-type System = Component -> SystemOutput
+type SingleInputSystem = Component -> SystemOutput
+
+data System = SINGLE SingleInputSystem
+    --                     V Can be any Ord instance
+    | BATCH  (Component -> Int) ([Component] -> [Maybe SystemOutput])
+    | ALL                       ([Component] -> [Maybe SystemOutput])
 
 {-|
     ==__SystemKey: __
@@ -304,22 +306,25 @@ runFrame :: Game -> ([IO ()], Game)
 runFrame g = (fst result, replaceEntities (snd result) g)
     where
         es = entities g
-        bindedEntities k m = runSystemOnEntities k m es
+        bindedEntities k m = runSystem k m es
         matrixOfOutputs = Map.mapWithKey bindedEntities (systems g)
         merged = mergeOutputs es matrixOfOutputs
         resolved = resolveEntityMessages merged
         result = outputsToNewFrame resolved
 
 -- Private
-runSystemOnEntities :: SystemKey -> System -> [Entity] -> [Maybe SystemOutput]
-runSystemOnEntities k sys = map (runSystem k sys)
+runSystem :: SystemKey -> System -> [Entity] -> [Maybe SystemOutput]
+runSystem k (SINGLE sys) = map (runSingleSystem k sys)
+-- runSystem k (BATCH filter sys) = 
+-- runSystem k (ALL sys) = sys 
 
 -- Private
-runSystem :: SystemKey -> System -> Entity -> Maybe SystemOutput
-runSystem key sys Entity{components=comps}
-    | Map.member key comps = Just (sys component)
-    | otherwise = Nothing
-    where component = (!) comps key
+runSingleSystem :: SystemKey -> SingleInputSystem -> Entity -> Maybe SystemOutput
+runSingleSystem key sys e = sys =<< getMaybeComponent key e
+
+-- Private
+getMaybeComponent :: SystemKey -> Entity -> Maybe Component
+getMaybeComponent k Entity{components=comps} = Map.lookup k comps
 
 -- Private
 -- TODO use Traversable instead of Map?
