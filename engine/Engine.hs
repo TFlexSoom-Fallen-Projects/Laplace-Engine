@@ -26,11 +26,7 @@ module Engine (
     newEntityFromList,
     addEntity,
     getComponent,
-    replaceComponent,
     singletonEntity,
-    addProducer,
-    addConsumers,
-    addConsumer,
 
     -- * System
     -- $system
@@ -53,9 +49,6 @@ import qualified Data.Map as Map
 
 -- Rewritten Dynamic Wheel for Heterogeneous lists
 import Dynamic (Dynamic, DynamicallyAware, DynamicHolder)
-import qualified Data.Foldable as Map
-
--- TODO should have I have Runtime Defined Modules?
 
 {-$utility
     =__Utility:__
@@ -132,29 +125,14 @@ instance Mergeable Message where
     Holds the attached/acting Systems on the piece of data represented through Map's key
     Holds possible callstack of previous System Actions (Component)
 -}
-data Entity = Entity {
-    components :: Map.Map SystemKey Component,
-    messages :: Message
-}
-
-instance Creatable Entity where
-    new = Entity {
-        components = Map.empty,
-        messages = new :: Message
-    }
-
-instance Mergeable Entity where
-    merge e e' = e{
-        components = mergeUnsafe (components e) (components e'),
-        messages = merge (messages (e :: Entity)) (messages (e' :: Entity))
-    }
+type Entity = Map.Map SystemKey Component
 
 getComponent :: SystemKey -> Entity -> Component
-getComponent k e = (!) (components e) k
+getComponent k e = (!) e k
 
 addComponentWith :: (Component -> Component -> Component)
     -> SystemKey -> Component -> Entity -> Entity
-addComponentWith lambda k c e = replaceComponent (Map.insertWith lambda k c (components e)) e
+addComponentWith = Map.insertWith
 
 addComponent :: SystemKey -> Component -> Entity -> Entity
 addComponent = addComponentWith const
@@ -162,43 +140,15 @@ addComponent = addComponentWith const
 addComponentAssert :: SystemKey -> Component -> Entity -> Entity
 addComponentAssert = addComponentWith (error "Key Collision Insert")
 
-replaceComponent :: Map.Map SystemKey Component -> Entity -> Entity
-replaceComponent comps e = e{components = comps}
-
-replaceMessages :: Message -> Entity -> Entity
-replaceMessages msg e = e{messages=msg}
+-- Private
+getMaybeComponent :: SystemKey -> Entity -> Maybe Component
+getMaybeComponent = Map.lookup
 
 newEntityFromList :: [Entity -> Entity] -> Entity
 newEntityFromList = foldl (\ arg x -> x arg) (new :: Entity)
 
 singletonEntity :: SystemKey -> Component -> Entity
-singletonEntity k c = replaceComponent (Map.insert k c Map.empty) (new :: Entity)
-
-addProducer :: MessageKey -> Component -> Entity -> Entity
-addProducer k comp e =  replaceMessages newMessage e
-    where newMessage = msgAddProducer k comp (messages (e :: Entity))
-
-msgAddProducer :: MessageKey -> Component -> Message -> Message
-msgAddProducer k comp msg = msg{producers = Map.insertWith assertion k comp (producers msg)}
-    where assertion = error "Producer already exists!"
-
-addConsumers :: MessageKey -> [SingleInputSystem] -> Entity -> Entity
-addConsumers k systems e = replaceMessages newMessage e
-    where newMessage = msgAddConsumers k systems (messages (e :: Entity))
-
-addConsumer :: MessageKey -> SingleInputSystem -> Entity -> Entity
-addConsumer k sys = addConsumers k [sys]
-
--- Private
-msgAddConsumers :: MessageKey -> [SingleInputSystem] -> Message -> Message
-msgAddConsumers k systems msg = msg{consumers = Map.insert k newCons consMap}
-    where
-        consMap = consumers msg
-        cons = Map.findWithDefault [] k consMap
-        newCons = cons ++ systems
-
-msgAddConsumer :: MessageKey -> SingleInputSystem -> Message -> Message
-msgAddConsumer k sys = msgAddConsumers k [sys]
+singletonEntity k c = Map.insert k c (new :: Entity)
 
 {-$system
     =__System:__
@@ -321,10 +271,6 @@ runSystem k (SINGLE sys) = map (runSingleSystem k sys)
 -- Private
 runSingleSystem :: SystemKey -> SingleInputSystem -> Entity -> Maybe SystemOutput
 runSingleSystem key sys e = sys =<< getMaybeComponent key e
-
--- Private
-getMaybeComponent :: SystemKey -> Entity -> Maybe Component
-getMaybeComponent k Entity{components=comps} = Map.lookup k comps
 
 -- Private
 -- TODO use Traversable instead of Map?
