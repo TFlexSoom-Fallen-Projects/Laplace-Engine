@@ -6,19 +6,9 @@
 -- features for extending the functionality of the engine. It may also be convenient for
 -- third parties to implement systems and consolidate system/component groups for entities.
 module Engine (
-    -- * Engine Utilities
-    -- $utility
-    Creatable,
-    Mergeable,
-
     -- * Component
     -- $component
     Component(..),
-
-    -- * Message
-    -- $message
-    MessageKey,
-    Message,
 
     -- * Entity
     -- $entity
@@ -35,6 +25,11 @@ module Engine (
     System,
     SystemOutput(..),
 
+    -- * Message
+    -- $message
+    MessageKey,
+    Message,
+
     -- * Game
     -- $game
     Game(..),
@@ -46,38 +41,11 @@ module Engine (
 -- Base Imports
 import Data.Map((!))
 import qualified Data.Map as Map
+import qualified Data.Set as Set
 
 -- Rewritten Dynamic Wheel for Heterogeneous lists
-import Dynamic (Dynamic, DynamicallyAware, DynamicHolder)
-
-{-$utility
-    =__Utility:__
-    Utilities for help in defining structures and functionality for the engine.
-    The goal of these is to avoid repeating myself. As I coded the engine
-    I found myself chasing typical patterns. I decided to classify these.
-
-    This may include some additional classes and assertion utilities in the future
--}
-
--- | Anything that can be created and "zero" valued
-class Creatable a where
-    -- | Creates a new instance of the datatype
-    new :: a
-
--- | Anything that can be safely merged with itself
-class Mergeable a where
-    -- | Merges first two instances and outputs the combinations
-    merge :: a -> a -> a
-
-instance Mergeable a => Mergeable ( Maybe a ) where
-    merge (Just a) (Just b) = Just (merge a b)
-    merge (Just a) _ = Just a
-    merge _ (Just b) = Just b
-    merge _ _ = Nothing
-
--- | Use to assert that when 2 maps Merge they do not collide
-mergeUnsafe :: Ord k => Map.Map k a -> Map.Map k a -> Map.Map k a
-mergeUnsafe = Map.unionWith (error "Key Collision Union")
+import Core.Dynamic (Dynamic, DynamicallyAware, DynamicHolder)
+import Core.Util(Creatable(..), Mergeable(..), mergeUnsafe)
 
 {-$component
     =__Component:__
@@ -89,35 +57,6 @@ mergeUnsafe = Map.unionWith (error "Key Collision Union")
 -}
 
 type Component = DynamicHolder
-
--- TODO For MessageKey and SystemKey --> 64 bit ints would be more optimal than Strings
-type MessageKey = String
-
-{-$message
-    =__Message:__
-    Messages are a way for systems to communicate data to eachother within the frame/iteration. I many cases,
-    systems can couple/communicate with other systems by creating entities with respective components. For all
-    work on entities that are needed outside of the scope of the system, Messages provide a way to interface
-    without coupling with these other systems: producing and interface with 'producers' or consuming
-    an interface with 'consumers'
-
--}
-data Message = Message {
-    producers :: Map.Map MessageKey Component,
-    consumers :: Map.Map MessageKey [SingleInputSystem]
-}
-
-instance Creatable Message where
-    new = Message {
-        producers = Map.empty,
-        consumers = Map.empty
-    }
-
-instance Mergeable Message where
-    merge m m' = m {
-        producers = mergeUnsafe (producers m) (producers m'),
-        consumers = Map.unionWith (++) (consumers m) (consumers m')
-    }
 
 {-$entity
     =__Entity:__
@@ -145,10 +84,10 @@ getMaybeComponent :: SystemKey -> Entity -> Maybe Component
 getMaybeComponent = Map.lookup
 
 newEntityFromList :: [Entity -> Entity] -> Entity
-newEntityFromList = foldl (\ arg x -> x arg) (new :: Entity)
+newEntityFromList = foldl (\ arg x -> x arg) Map.empty
 
 singletonEntity :: SystemKey -> Component -> Entity
-singletonEntity k c = Map.insert k c (new :: Entity)
+singletonEntity k c = Map.insert k c Map.empty
 
 {-$system
     =__System:__
@@ -210,6 +149,35 @@ newSystemOutput k comp = SystemOutput {
     job = new :: EngineJob
 }
 
+-- TODO For MessageKey and SystemKey --> 64 bit ints would be more optimal than Strings
+type MessageKey = String
+
+{-$message
+    =__Message:__
+    Messages are a way for systems to communicate data to eachother within the frame/iteration. I many cases,
+    systems can couple/communicate with other systems by creating entities with respective components. For all
+    work on entities that are needed outside of the scope of the system, Messages provide a way to interface
+    without coupling with these other systems: producing and interface with 'producers' or consuming
+    an interface with 'consumers'
+
+-}
+data Message = Message {
+    producers :: Map.Map MessageKey Component,
+    consumers :: Map.Map MessageKey [SingleInputSystem]
+}
+
+instance Creatable Message where
+    new = Message {
+        producers = Map.empty,
+        consumers = Map.empty
+    }
+
+instance Mergeable Message where
+    merge m m' = m {
+        producers = mergeUnsafe (producers m) (producers m'),
+        consumers = Map.unionWith (++) (consumers m) (consumers m')
+    }
+
 {-$game
     =__Game:__
     List of entities which can be filtered with system system key map. Entities will then
@@ -259,8 +227,8 @@ runFrame g = (fst result, replaceEntities (snd result) g)
         bindedEntities k m = runSystem k m es
         matrixOfOutputs = Map.mapWithKey bindedEntities (systems g)
         merged = mergeOutputs es matrixOfOutputs
-        resolved = resolveEntityMessages merged
-        result = outputsToNewFrame resolved
+        -- resolved = resolveEntityMessages merged
+        result = outputsToNewFrame merged
 
 -- Private
 runSystem :: SystemKey -> System -> [Entity] -> [Maybe SystemOutput]
@@ -270,7 +238,7 @@ runSystem k (SINGLE sys) = map (runSingleSystem k sys)
 
 -- Private
 runSingleSystem :: SystemKey -> SingleInputSystem -> Entity -> Maybe SystemOutput
-runSingleSystem key sys e = sys =<< getMaybeComponent key e
+runSingleSystem key sys e = (Just . sys) =<< getMaybeComponent key e
 
 -- Private
 -- TODO use Traversable instead of Map?
@@ -304,34 +272,34 @@ mergeResolver SystemOutput{key=k, modified=comp, job=outJobs} res =
     }
 
 -- Private
-resolveEntityMessages :: [EntityResolver] -> [EntityResolver]
-resolveEntityMessages = map (assertEmptyConsumers . resolveEntityMessage)
+-- resolveEntityMessages :: [EntityResolver] -> [EntityResolver]
+-- resolveEntityMessages = map (assertEmptyConsumers . resolveEntityMessage)
 
 -- Private
 -- The Final Output Should have empty Consumers
-resolveEntityMessage :: EntityResolver -> EntityResolver
-resolveEntityMessage
-        er@(EntityResolver {
-            modified=e,
-            job=j@(EngineJob{
-                    messages= msg@(Message {
-                        producers=p,
-                        consumers=c
-                    })
-            })
-        } )
-    | Map.null c = er
-    | Map.null jobsToRes = error "Deadlock. Jobs nonempty with no providers."
-    | otherwise = resolveEntityMessage (foldr mergeResolver newResolver (resolveMessage p jobsToRes))
-        where
-            jobsToRes = Map.intersection c p
-            unresolved = Map.difference c p
-            newResolver = er{job=j{messages=msg{consumers=unresolved}}} :: EntityResolver
+-- resolveEntityMessage :: EntityResolver -> EntityResolver
+-- resolveEntityMessage
+--         er@(EntityResolver {
+--             modified=e,
+--             job=j@(EngineJob{
+--                     messages= msg@(Message {
+--                         producers=p,
+--                         consumers=c
+--                     })
+--             })
+--         } )
+--     | Map.null c = er
+--     | Map.null jobsToRes = error "Deadlock. Jobs nonempty with no providers."
+--     | otherwise = resolveEntityMessage (foldr mergeResolver newResolver (resolveMessage p jobsToRes))
+--         where
+--             jobsToRes = Map.intersection c p
+--             unresolved = Map.difference c p
+--             newResolver = er{job=j{messages=msg{consumers=unresolved}}} :: EntityResolver
 
 -- Private
-resolveMessage :: Map.Map MessageKey Component -> Map.Map MessageKey [System] -> [SystemOutput]
-resolveMessage producers = Map.foldrWithKey (consumeAndConcat producers) []
-    where consumeAndConcat p k sysArr = (++) (map (\sys -> sys ((!) p k)) sysArr)
+-- resolveMessage :: Map.Map MessageKey Component -> Map.Map MessageKey [System] -> [SystemOutput]
+-- resolveMessage producers = Map.foldrWithKey (consumeAndConcat producers) []
+--     where consumeAndConcat p k sysArr = (++) (map (\sys -> sys ((!) p k)) sysArr)
 
 -- Private
 assertEmptyConsumers :: EntityResolver -> EntityResolver

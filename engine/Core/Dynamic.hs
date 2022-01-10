@@ -1,5 +1,5 @@
 {-# LANGUAGE FlexibleInstances #-}
-module Dynamic where
+module Core.Dynamic where
 
 data Dynamic =
     BOOL Bool |

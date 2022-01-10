@@ -5,7 +5,7 @@ module Systems.Input (
 ) where
 
 import Data.Map(findWithDefault)
-import Dynamic (Dynamic, DynamicallyAware(..), DynamicHolder(..))
+import Core.Dynamic (Dynamic, DynamicallyAware(..), DynamicHolder(..))
 import Engine (
     SystemKey,
     enableSystem,
