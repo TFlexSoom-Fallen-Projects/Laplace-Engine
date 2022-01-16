@@ -29,3 +29,9 @@ instance Mergeable a => Mergeable ( Maybe a ) where
 -- | Use to assert that when 2 maps Merge they do not collide
 mergeUnsafe :: Ord k => Map.Map k a -> Map.Map k a -> Map.Map k a
 mergeUnsafe = Map.unionWith (error "Key Collision Union")
+
+apply :: a -> (a -> b) -> b
+apply a lambda = lambda a
+
+defaultNothing :: (a -> Maybe b) -> Maybe a -> Maybe b
+defaultNothing = maybe Nothing

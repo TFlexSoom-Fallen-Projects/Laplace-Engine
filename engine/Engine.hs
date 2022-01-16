@@ -25,11 +25,6 @@ module Engine (
     System,
     SystemOutput(..),
 
-    -- * Message
-    -- $message
-    MessageKey,
-    Message,
-
     -- * Game
     -- $game
     Game(..),
@@ -45,7 +40,9 @@ import qualified Data.Set as Set
 
 -- Rewritten Dynamic Wheel for Heterogeneous lists
 import Core.Dynamic (Dynamic, DynamicallyAware, DynamicHolder)
-import Core.Util(Creatable(..), Mergeable(..), mergeUnsafe)
+import Core.Util (Creatable(..), Mergeable(..), mergeUnsafe, apply, defaultNothing)
+import qualified Core.DependencyTree as DependencyTree
+import Core.DependencyTree (DependencyTree)
 
 {-$component
     =__Component:__
@@ -98,12 +95,12 @@ singletonEntity k c = Map.insert k c Map.empty
     ==__Laws:__
     1. Every System should have a SystemKey
 -}
-type SingleInputSystem = Component -> SystemOutput
+type SingleInputSystem = SystemInput -> SystemOutput
 
 data System = SINGLE SingleInputSystem
     --                     V Can be any Ord instance
-    | BATCH  (Component -> Int) ([Component] -> [Maybe SystemOutput])
-    | ALL                       ([Component] -> [Maybe SystemOutput])
+    | BATCH  (Component -> Int) ([SystemInput] -> [Maybe SystemOutput])
+    | ALL                       ([SystemInput] -> [Maybe SystemOutput])
 
 {-|
     ==__SystemKey: __
@@ -111,10 +108,13 @@ data System = SINGLE SingleInputSystem
     Each System should have it's own unique key to show existance on an entity
 -}
 type SystemKey = String
+type SharingKey = String
+-- TODO Keys would be better as 64 bit integers than strings
+
+type ShareMap = Map.Map SharingKey Component
 
 data EngineJob = EngineJob {
     io :: [IO ()],
-    messages :: Message,
     added :: [Entity],
     delete :: Bool
 }
@@ -122,7 +122,6 @@ data EngineJob = EngineJob {
 instance Creatable EngineJob where
     new = EngineJob {
         io = [],
-        messages = new :: Message,
         added = [],
         delete = False
     }
@@ -130,53 +129,39 @@ instance Creatable EngineJob where
 instance Mergeable EngineJob where
     merge job job' = job {
         io = io job ++ io job',
-        messages = merge (messages (job :: EngineJob)) (messages (job' :: EngineJob)),
         added = added job ++ added job',
         delete = delete job || delete job'
     }
 
-
-data SystemOutput = SystemOutput {
-    key :: SystemKey,
+data Modification = Modification {
     modified :: Component,
     job :: EngineJob
+}
+
+data SystemOutput = SystemOutput {
+    modification :: Modification,
+    shared :: ShareMap
 }
 
 newSystemOutput :: SystemKey -> Component -> SystemOutput
 newSystemOutput k comp = SystemOutput {
     key = k,
+    shared = Map.empty,
     modified = comp,
     job = new :: EngineJob
 }
 
--- TODO For MessageKey and SystemKey --> 64 bit ints would be more optimal than Strings
-type MessageKey = String
 
-{-$message
-    =__Message:__
-    Messages are a way for systems to communicate data to eachother within the frame/iteration. I many cases,
-    systems can couple/communicate with other systems by creating entities with respective components. For all
-    work on entities that are needed outside of the scope of the system, Messages provide a way to interface
-    without coupling with these other systems: producing and interface with 'producers' or consuming
-    an interface with 'consumers'
-
--}
-data Message = Message {
-    producers :: Map.Map MessageKey Component,
-    consumers :: Map.Map MessageKey [SingleInputSystem]
+data SystemInput = SystemInput {
+    shared :: ShareMap,
+    component :: Component
 }
 
-instance Creatable Message where
-    new = Message {
-        producers = Map.empty,
-        consumers = Map.empty
-    }
-
-instance Mergeable Message where
-    merge m m' = m {
-        producers = mergeUnsafe (producers m) (producers m'),
-        consumers = Map.unionWith (++) (consumers m) (consumers m')
-    }
+toSystemInput :: ShareMap -> Component -> SystemInput
+toSystemInput shared comp = SystemInput {
+    shared = shared,
+    component = comp
+}
 
 {-$game
     =__Game:__
@@ -185,27 +170,45 @@ instance Mergeable Message where
 -}
 data Game = Game {
     systems :: Map.Map SystemKey System,
+    dependency :: DependencyTree.DependencyTree SystemKey,
     entities :: [Entity]
 }
 
 instance Creatable Game where
     new = Game {
         systems=Map.empty,
+        dependency= DependencyTree.empty,
         entities=[]
     }
 
 instance Mergeable Game where
     merge g g' = Game {
         systems = mergeUnsafe (systems g) (systems g'),
+        -- TODO Shouldn't this be merge?
+        dependency = DependencyTree.union (dependency g) (dependency g'),
         entities = entities g ++ entities g'
     }
 
-enableSystem :: String -> System -> Game -> Game
-enableSystem key sys g = replaceSystems newSystems g
-    where newSystems = Map.insert key sys (systems g)
+enableSystem :: SystemKey -> System -> Game -> Game
+enableSystem key sys g@(Game{systems=sysMap, dependency=deps}) =
+    (.) (replaceSystems newSystems) (replaceDependency newDependency) g
+    where
+        newSystems = Map.insert key sys sysMap
+        newDependency = DependencyTree.insert key deps
+
+-- Copied from enabled system due to DependencyTree optimization
+enableSystemAfter :: SystemKey -> System -> [SystemKey] -> Game -> Game
+enableSystemAfter key sys keys g@(Game{systems=sysMap, dependency=deps}) =
+    (.) (replaceSystems newSystems) (replaceDependency newDependency) g
+    where
+        newSystems = Map.insert key sys sysMap
+        newDependency = foldr (`DependencyTree.depend` key) deps keys
 
 replaceSystems :: Map.Map SystemKey System -> Game -> Game
 replaceSystems sys g = g{systems = sys}
+
+replaceDependency :: DependencyTree SystemKey -> Game -> Game
+replaceDependency dep g = g{dependency=dep}
 
 replaceEntities :: [Entity] -> Game -> Game
 replaceEntities e g = g{entities = e}
@@ -221,97 +224,96 @@ runGame game = do {
 }
 
 runFrame :: Game -> ([IO ()], Game)
-runFrame g = (fst result, replaceEntities (snd result) g)
+runFrame g@(Game{
+        systems=sysMap,
+        dependency=dep,
+        entities=es
+    }) = (fst result, replaceEntities (snd result) g)
     where
-        es = entities g
+        outputs = foldForOutputs dep (sysMap !) es
+
         bindedEntities k m = runSystem k m es
         matrixOfOutputs = Map.mapWithKey bindedEntities (systems g)
         merged = mergeOutputs es matrixOfOutputs
         -- resolved = resolveEntityMessages merged
         result = outputsToNewFrame merged
 
+
 -- Private
-runSystem :: SystemKey -> System -> [Entity] -> [Maybe SystemOutput]
+data SystemFold = SystemFold {
+    modifications :: [Maybe Modification],
+    shared :: ShareMap
+}
+
+newSystemFold :: Int -> SystemFold
+newSystemFold len = SystemFold {
+    modifications = take len (repeat Nothing),
+    shared = Map.empty
+}
+
+instance Mergeable SystemFold where
+    merge 
+        fold@(SystemFold{modifications=mods, shared=shared'}) 
+        SystemFold{modifications=mods', shared=shared'} = 
+            fold{
+                modifications 
+            }
+
+foldForOutputs :: DependencyTree SystemKey -> (SystemKey -> System) -> [Entity] -> [Maybe Modification]
+foldForOutputs deps sysGetter es = DependencyTree.foldr' transform (newSystemFold es) deps
+    where transform key fold = 
+
+-- bindededSystems k mappedOutputs =  Map.insert k (runSystem ((!) sysMap) ) mappedOutputs
+-- outputs = DependencyTree.foldr'
+
+
+-- Private
+runSystem :: SystemKey -> System -> [SystemKey -> Maybe SystemInput] -> [Maybe SystemOutput]
 runSystem k (SINGLE sys) = map (runSingleSystem k sys)
 -- runSystem k (BATCH filter sys) = 
 -- runSystem k (ALL sys) = sys 
 
 -- Private
-runSingleSystem :: SystemKey -> SingleInputSystem -> Entity -> Maybe SystemOutput
-runSingleSystem key sys e = (Just . sys) =<< getMaybeComponent key e
-
--- Private
--- TODO use Traversable instead of Map?
-mergeOutputs :: [Entity] -> Map.Map SystemKey [Maybe SystemOutput] -> [EntityResolver]
-mergeOutputs es = Map.foldr' (zipWith mergeMaybeResolver) (map createResolver es)
+runSingleSystem :: SystemKey -> SingleInputSystem -> (SystemKey -> Maybe SystemInput) -> Maybe SystemOutput
+runSingleSystem key sys = (.) (defaultNothing (Just . sys)) (apply key)
 
 --Private
-data EntityResolver = EntityResolver {
+data SystemOutputResolver = SystemOutputResolver {
     modified :: Entity,
     job :: EngineJob
 }
 
+
 -- Private
-createResolver :: Entity -> EntityResolver
-createResolver e = EntityResolver {
+-- TODO use Traversable instead of Map?
+mergeOutputs :: [Entity] -> Map.Map SystemKey [Maybe SystemOutput] -> [SystemOutputResolver]
+mergeOutputs es = Map.foldr' (zipWith mergeMaybeResolver) (map createResolver es)
+
+-- Private
+createResolver :: Entity -> SystemOutputResolver
+createResolver e = SystemOutputResolver {
     modified = e,
     job = new :: EngineJob
 }
 
 -- Private
-mergeMaybeResolver :: Maybe SystemOutput -> EntityResolver -> EntityResolver
+mergeMaybeResolver :: Maybe SystemOutput -> SystemOutputResolver -> SystemOutputResolver
 mergeMaybeResolver (Just out@(SystemOutput{key=k, modified=comp, job=outJobs})) = mergeResolver out
 mergeMaybeResolver _ = id
 
 -- Private
-mergeResolver :: SystemOutput -> EntityResolver -> EntityResolver
+mergeResolver :: SystemOutput -> SystemOutputResolver -> SystemOutputResolver
 mergeResolver SystemOutput{key=k, modified=comp, job=outJobs} res =
     res {
-        modified = addComponentAssert k comp (modified (res :: EntityResolver)),
-        job = merge (job (res :: EntityResolver)) outJobs
+        modified = addComponentAssert k comp (modified (res :: SystemOutputResolver)),
+        job = merge (job (res :: SystemOutputResolver)) outJobs
     }
 
 -- Private
--- resolveEntityMessages :: [EntityResolver] -> [EntityResolver]
--- resolveEntityMessages = map (assertEmptyConsumers . resolveEntityMessage)
-
--- Private
--- The Final Output Should have empty Consumers
--- resolveEntityMessage :: EntityResolver -> EntityResolver
--- resolveEntityMessage
---         er@(EntityResolver {
---             modified=e,
---             job=j@(EngineJob{
---                     messages= msg@(Message {
---                         producers=p,
---                         consumers=c
---                     })
---             })
---         } )
---     | Map.null c = er
---     | Map.null jobsToRes = error "Deadlock. Jobs nonempty with no providers."
---     | otherwise = resolveEntityMessage (foldr mergeResolver newResolver (resolveMessage p jobsToRes))
---         where
---             jobsToRes = Map.intersection c p
---             unresolved = Map.difference c p
---             newResolver = er{job=j{messages=msg{consumers=unresolved}}} :: EntityResolver
-
--- Private
--- resolveMessage :: Map.Map MessageKey Component -> Map.Map MessageKey [System] -> [SystemOutput]
--- resolveMessage producers = Map.foldrWithKey (consumeAndConcat producers) []
---     where consumeAndConcat p k sysArr = (++) (map (\sys -> sys ((!) p k)) sysArr)
-
--- Private
-assertEmptyConsumers :: EntityResolver -> EntityResolver
-assertEmptyConsumers e@(EntityResolver{ job=EngineJob {messages= Message { consumers=c } } })
-    | Map.null c = e
-    | otherwise = error "Consumers are Non-Empty!"
-
--- Private
-outputsToNewFrame :: [EntityResolver] -> ([IO ()], [Entity])
+outputsToNewFrame :: [SystemOutputResolver] -> ([IO ()], [Entity])
 outputsToNewFrame = foldr outputToNewFrame ([], [])
 
 -- Private
-outputToNewFrame :: EntityResolver -> ([IO ()], [Entity]) -> ([IO ()], [Entity])
-outputToNewFrame EntityResolver{modified=mod, job=EngineJob{io=ioj, added=addedj, delete=False}} (ios, es) = (ios ++ ioj, mod : addedj)
-outputToNewFrame EntityResolver{modified=mod, job=EngineJob{io=ioj, added=addedj, delete=True}} (ios, es) = (ios ++ ioj, addedj)
+outputToNewFrame :: SystemOutputResolver -> ([IO ()], [Entity]) -> ([IO ()], [Entity])
+outputToNewFrame SystemOutputResolver{modified=mod, job=EngineJob{io=ioj, added=addedj, delete=False}} (ios, es) = (ios ++ ioj, mod : addedj)
+outputToNewFrame SystemOutputResolver{modified=mod, job=EngineJob{io=ioj, added=addedj, delete=True}} (ios, es) = (ios ++ ioj, addedj)
