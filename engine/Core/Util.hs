@@ -35,3 +35,7 @@ apply a lambda = lambda a
 
 defaultNothing :: (a -> Maybe b) -> Maybe a -> Maybe b
 defaultNothing = maybe Nothing
+
+assert :: [Char] -> (a -> Bool) -> a -> a
+assert err lambda a | lambda a = a
+                    | otherwise = error err

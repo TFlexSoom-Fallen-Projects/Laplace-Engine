@@ -37,10 +37,11 @@ module Engine (
 import Data.Map((!))
 import qualified Data.Map as Map
 import qualified Data.Set as Set
+import Data.Maybe(catMaybes)
 
 -- Rewritten Dynamic Wheel for Heterogeneous lists
 import Core.Dynamic (Dynamic, DynamicallyAware, DynamicHolder)
-import Core.Util (Creatable(..), Mergeable(..), mergeUnsafe, apply, defaultNothing)
+import Core.Util (Creatable(..), Mergeable(..), mergeUnsafe, apply, defaultNothing, assert)
 import qualified Core.DependencyTree as DependencyTree
 import Core.DependencyTree (DependencyTree)
 
@@ -94,13 +95,15 @@ singletonEntity k c = Map.insert k c Map.empty
 
     ==__Laws:__
     1. Every System should have a SystemKey
+    2. (len input) == (len output)
 -}
 type SingleInputSystem = SystemInput -> SystemOutput
+type MultiInputSystem = [SystemInput] -> [Maybe SystemOutput]
 
 data System = SINGLE SingleInputSystem
-    --                     V Can be any Ord instance
-    | BATCH  (Component -> Int) ([SystemInput] -> [Maybe SystemOutput])
-    | ALL                       ([SystemInput] -> [Maybe SystemOutput])
+    --                        V Can be any Ord instance
+    | BATCH  (SystemInput -> Maybe Int) MultiInputSystem
+    | ALL                               MultiInputSystem
 
 {-|
     ==__SystemKey: __
@@ -113,44 +116,38 @@ type SharingKey = String
 
 type ShareMap = Map.Map SharingKey Component
 
+-- Work for the engine that is not dependent on the entity
 data EngineJob = EngineJob {
     io :: [IO ()],
-    added :: [Entity],
-    delete :: Bool
+    added :: [Entity]
 }
 
 instance Creatable EngineJob where
     new = EngineJob {
         io = [],
-        added = [],
-        delete = False
+        added = []
     }
 
 instance Mergeable EngineJob where
     merge job job' = job {
         io = io job ++ io job',
-        added = added job ++ added job',
-        delete = delete job || delete job'
+        added = added job ++ added job'
     }
 
+-- Work for the engine that is dependent on the entity
 data Modification = Modification {
     modified :: Component,
-    job :: EngineJob
-}
-
-data SystemOutput = SystemOutput {
-    modification :: Modification,
+    delete :: Bool,
     shared :: ShareMap
 }
 
-newSystemOutput :: SystemKey -> Component -> SystemOutput
-newSystemOutput k comp = SystemOutput {
-    key = k,
-    shared = Map.empty,
-    modified = comp,
-    job = new :: EngineJob
-}
+-- We cannot merge or create modification due to component.
 
+-- Tuple Job and Modification for Output of each system
+data SystemOutput = SystemOutput {
+    modification :: Modification,
+    job :: EngineJob
+}
 
 data SystemInput = SystemInput {
     shared :: ShareMap,
@@ -176,9 +173,9 @@ data Game = Game {
 
 instance Creatable Game where
     new = Game {
-        systems=Map.empty,
-        dependency= DependencyTree.empty,
-        entities=[]
+        systems = Map.empty,
+        dependency = DependencyTree.empty,
+        entities = []
     }
 
 instance Mergeable Game where
@@ -230,90 +227,99 @@ runFrame g@(Game{
         entities=es
     }) = (fst result, replaceEntities (snd result) g)
     where
-        outputs = foldForOutputs dep (sysMap !) es
-
-        bindedEntities k m = runSystem k m es
-        matrixOfOutputs = Map.mapWithKey bindedEntities (systems g)
-        merged = mergeOutputs es matrixOfOutputs
-        -- resolved = resolveEntityMessages merged
-        result = outputsToNewFrame merged
+        sysFolds = foldForOutputs dep (sysMap !) (newSystemOutputFolds es)
+        result = outputsToNewFrame sysFolds
 
 
 -- Private
-data SystemFold = SystemFold {
-    modifications :: [Maybe Modification],
-    shared :: ShareMap
-}
-
-newSystemFold :: Int -> SystemFold
-newSystemFold len = SystemFold {
-    modifications = take len (repeat Nothing),
-    shared = Map.empty
-}
-
-instance Mergeable SystemFold where
-    merge 
-        fold@(SystemFold{modifications=mods, shared=shared'}) 
-        SystemFold{modifications=mods', shared=shared'} = 
-            fold{
-                modifications 
-            }
-
-foldForOutputs :: DependencyTree SystemKey -> (SystemKey -> System) -> [Entity] -> [Maybe Modification]
-foldForOutputs deps sysGetter es = DependencyTree.foldr' transform (newSystemFold es) deps
-    where transform key fold = 
-
--- bindededSystems k mappedOutputs =  Map.insert k (runSystem ((!) sysMap) ) mappedOutputs
--- outputs = DependencyTree.foldr'
-
-
--- Private
-runSystem :: SystemKey -> System -> [SystemKey -> Maybe SystemInput] -> [Maybe SystemOutput]
-runSystem k (SINGLE sys) = map (runSingleSystem k sys)
--- runSystem k (BATCH filter sys) = 
--- runSystem k (ALL sys) = sys 
-
--- Private
-runSingleSystem :: SystemKey -> SingleInputSystem -> (SystemKey -> Maybe SystemInput) -> Maybe SystemOutput
-runSingleSystem key sys = (.) (defaultNothing (Just . sys)) (apply key)
-
---Private
-data SystemOutputResolver = SystemOutputResolver {
+data SystemOutputFold = SystemOutputFold {
+    jobs :: EngineJob,
     modified :: Entity,
-    job :: EngineJob
+    shared :: ShareMap,
+    delete :: Bool
 }
 
-
--- Private
--- TODO use Traversable instead of Map?
-mergeOutputs :: [Entity] -> Map.Map SystemKey [Maybe SystemOutput] -> [SystemOutputResolver]
-mergeOutputs es = Map.foldr' (zipWith mergeMaybeResolver) (map createResolver es)
-
--- Private
-createResolver :: Entity -> SystemOutputResolver
-createResolver e = SystemOutputResolver {
+newSystemOutputFold :: Entity -> SystemOutputFold
+newSystemOutputFold e = SystemOutputFold {
+    jobs = new :: EngineJob,
     modified = e,
-    job = new :: EngineJob
+    shared = Map.empty,
+    delete = False
 }
 
--- Private
-mergeMaybeResolver :: Maybe SystemOutput -> SystemOutputResolver -> SystemOutputResolver
-mergeMaybeResolver (Just out@(SystemOutput{key=k, modified=comp, job=outJobs})) = mergeResolver out
-mergeMaybeResolver _ = id
+newSystemOutputFolds :: [Entity] -> [SystemOutputFold]
+newSystemOutputFolds = map newSystemOutputFold
 
--- Private
-mergeResolver :: SystemOutput -> SystemOutputResolver -> SystemOutputResolver
-mergeResolver SystemOutput{key=k, modified=comp, job=outJobs} res =
-    res {
-        modified = addComponentAssert k comp (modified (res :: SystemOutputResolver)),
-        job = merge (job (res :: SystemOutputResolver)) outJobs
+-- It is assumed that the systme output has to do with the same entity as the 
+-- SystemOutputFold. Thus the modified entity stays the same through the frame.
+applyOutputToFold :: SystemKey -> Maybe SystemOutput -> SystemOutputFold -> SystemOutputFold
+applyOutputToFold _ Nothing fold = fold
+applyOutputToFold
+    key
+
+    (Just SystemOutput {
+        modification = Modification {modified=comp, delete=del', shared=shared'},
+        job = job'
+    })
+
+    fold@(SystemOutputFold{jobs=job, modified=mod, shared=shared, delete=del})
+
+    = fold {
+        jobs = merge job job',
+        modified = Map.insert key comp mod,
+        shared = Map.union shared shared',
+        delete = del || del'
     }
 
+
+applyOutputToFolds :: SystemKey -> [Maybe SystemOutput] -> [SystemOutputFold] -> [SystemOutputFold]
+applyOutputToFolds key = zipWith (applyOutputToFold key)
+
+-- I considered having a readonly list of entities here... 
+-- but we are doing some major assertion work anyways and the computation
+-- seemed to get pretty unoptimized when working with a secondary list outside of SystemOutputFold
+-- Consider: Maybe include readonly entity in SystmeOutputFold datatype.
+foldForOutputs :: DependencyTree SystemKey -> (SystemKey -> System) -> [SystemOutputFold] -> [SystemOutputFold]
+foldForOutputs deps sysGetter sysFolds = DependencyTree.foldr' folder sysFolds deps
+    where
+        folder key sysFolds' = applyOutputToFolds key (getOutput key (map (getMaybeInput key) sysFolds')) sysFolds'
+        getOutput key' = runSystem (sysGetter key')
+        getMaybeInput key SystemOutputFold{modified=e, shared=shared}
+            | Map.member key e =
+                Just SystemInput { shared = shared, component = (!) e key }
+            | otherwise = Nothing
+
+
 -- Private
-outputsToNewFrame :: [SystemOutputResolver] -> ([IO ()], [Entity])
+runSystem :: System -> [Maybe SystemInput] -> [Maybe SystemOutput]
+runSystem (SINGLE sys) = map (runSingleSystem sys)
+runSystem (BATCH filter sys) = runMultiSystem filter sys
+runSystem (ALL sys) = runMultiSystem (const (Just 0)) sys
+
+-- Private
+runSingleSystem :: SingleInputSystem -> Maybe SystemInput -> Maybe SystemOutput
+runSingleSystem sys = defaultNothing (Just . sys)
+
+-- TODO
+-- Private
+runMultiSystem :: (SystemInput -> Maybe Int) -> MultiInputSystem -> [Maybe SystemInput] -> [Maybe SystemOutput]
+runMultiSystem filter sys maybeInputs = keepOrder (concatMap sys inputs) maybeInputs
+    where
+        inputs = [catMaybes maybeInputs] 
+
+-- Private
+keepOrder :: [Maybe SystemOutput] -> [Maybe SystemInput] -> [Maybe SystemOutput]
+keepOrder [] [] = []
+keepOrder [] ((Just y) : ys) = error "System Gave Smaller Number of Outputs"
+keepOrder (x : xs) [] = error "System Gave Larger Number of Outputs"
+keepOrder (x : xs) ((Just y) : ys) = x : keepOrder xs ys
+keepOrder lst (Nothing : ys) = Nothing : keepOrder lst ys
+
+-- Private
+outputsToNewFrame :: [SystemOutputFold] -> ([IO ()], [Entity])
 outputsToNewFrame = foldr outputToNewFrame ([], [])
 
 -- Private
-outputToNewFrame :: SystemOutputResolver -> ([IO ()], [Entity]) -> ([IO ()], [Entity])
-outputToNewFrame SystemOutputResolver{modified=mod, job=EngineJob{io=ioj, added=addedj, delete=False}} (ios, es) = (ios ++ ioj, mod : addedj)
-outputToNewFrame SystemOutputResolver{modified=mod, job=EngineJob{io=ioj, added=addedj, delete=True}} (ios, es) = (ios ++ ioj, addedj)
+outputToNewFrame :: SystemOutputFold -> ([IO ()], [Entity]) -> ([IO ()], [Entity])
+outputToNewFrame SystemOutputFold{modified=mod, jobs=EngineJob{io=ioj, added=addedj}, delete=False} (ios, es) = (ios ++ ioj, mod : addedj)
+outputToNewFrame SystemOutputFold{modified=mod, jobs=EngineJob{io=ioj, added=addedj}, delete=True} (ios, es) = (ios ++ ioj, addedj)
