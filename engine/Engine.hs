@@ -37,7 +37,7 @@ module Engine (
 import Data.Map((!))
 import qualified Data.Map as Map
 import qualified Data.Set as Set
-import Data.Maybe(catMaybes)
+import Data.Maybe(fromMaybe, catMaybes, mapMaybe)
 
 -- Rewritten Dynamic Wheel for Heterogeneous lists
 import Core.Dynamic (Dynamic, DynamicallyAware, DynamicHolder)
@@ -300,14 +300,29 @@ runSystem (ALL sys) = runMultiSystem (const (Just 0)) sys
 runSingleSystem :: SingleInputSystem -> Maybe SystemInput -> Maybe SystemOutput
 runSingleSystem sys = defaultNothing (Just . sys)
 
--- TODO
 -- Private
 runMultiSystem :: (SystemInput -> Maybe Int) -> MultiInputSystem -> [Maybe SystemInput] -> [Maybe SystemOutput]
-runMultiSystem filter sys maybeInputs = keepOrder (concatMap sys inputs) maybeInputs
+runMultiSystem filter sys maybeInputs = keepOrder outputs maybeInputs
     where
-        inputs = [catMaybes maybeInputs] 
+        inputs = catMaybes maybeInputs
+        maybeBatches = map filter inputs
+        batches = catMaybes maybeBatches
+        mapBatchToInputs = foldr folder Map.empty (zip batches inputs)
+        folder (num, input) = Map.alter (Just . (:) input . fromMaybe []) num
+        mapBatchToOutputs = Map.map sys mapBatchToInputs
+        outputs = batchToInOrder mapBatchToOutputs (reverse maybeBatches)
+
+batchToInOrder :: Map.Map Int [Maybe SystemOutput] -> [Maybe Int] -> [Maybe SystemOutput]
+batchToInOrder m [] | Map.null m = []
+                    | otherwise = error "System Provided More Outputs than Inputs"
+batchToInOrder m (Nothing : xs) = Nothing : batchToInOrder m xs
+batchToInOrder m ((Just x) : xs)
+                    | Map.member x m && not (null lst) = head lst : batchToInOrder (Map.insert x (tail lst) m) xs
+                    | otherwise = error "Engine Mapping Error"
+    where lst = (!) m x
 
 -- Private
+-- Assumes first list is in the same order as the second
 keepOrder :: [Maybe SystemOutput] -> [Maybe SystemInput] -> [Maybe SystemOutput]
 keepOrder [] [] = []
 keepOrder [] ((Just y) : ys) = error "System Gave Smaller Number of Outputs"
