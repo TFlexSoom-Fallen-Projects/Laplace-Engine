@@ -1,19 +1,25 @@
 module SDK (
-    Creatable,
+    Creatable(..),
+    Component(..),
     Entity,
     newEntityFromList,
-    addEntity,
     Game,
-    runFrame,
+    addEntity,
+    runFrames,
     runGame
 ) where
 
 -- | Used to Isolate individaul functions from The Engine as a public interface.
 import Engine(
-    Creatable,
+    Component(..),
     Entity,
     newEntityFromList,
-    addEntity,
     Game,
-    runFrame,
-    runGame)
+    addEntity,
+    runFrames,
+    runGame,
+    )
+
+import Core.Util(
+    Creatable(..),
+    )

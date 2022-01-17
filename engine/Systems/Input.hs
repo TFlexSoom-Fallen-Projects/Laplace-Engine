@@ -4,16 +4,23 @@ module Systems.Input (
     -- enableInput
 ) where
 
-import Data.Map(findWithDefault)
+import qualified Data.Map as Map
 import Core.Dynamic (Dynamic, DynamicallyAware(..), DynamicHolder(..))
 import Engine (
+    Component(..),
+    SingleInputSystem,
+    System(..),
     SystemKey,
-    enableSystem,
-    Entity,
-    System,
+    ShareMap,
+    SystemInput(..),
     SystemOutput(..),
+    Modification(..),
+    EngineJob(..),
+    enableSystem,
+    Entity(..),
+    addComponent,
     Game,
-    Component(..))
+    )
 
 -- | Input Systems for Keys, Joysticks, Buttons, etc.
 

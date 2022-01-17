@@ -1,13 +1,13 @@
 module ExampleGame (exampleGame) where
 
 import SDK(
-    newEntity,
+    Creatable(..),
     newEntityFromList,
     addEntity,
     Game,
-    newGame)
+    )
 import Systems.Console(enableConsole)
-import Entities.Actor(actor)
+import Entities.Actor(actor, actorCustom)
 
 {-
 
@@ -16,6 +16,10 @@ An example Game Built With Engine
 
 -}
 exampleGame :: Game
-exampleGame = foldl (\ arg x -> x arg) newGame
-    [ enableConsole 
-    , addEntity actor ]
+exampleGame = foldl (\ arg x -> x arg) (new :: Game)
+    [ 
+          enableConsole 
+        , addEntity (actorCustom "This is an Entity 1") 
+        , addEntity (actorCustom "This Is an Entity 2")
+        , addEntity (actorCustom "This Is an Entity 3")
+    ]

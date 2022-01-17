@@ -4,18 +4,23 @@ module Systems.Console (
     enableConsole
 ) where
 
-import Data.Map(findWithDefault)
+import qualified Data.Map as Map
 import Core.Dynamic (Dynamic, DynamicallyAware(..), DynamicHolder(..))
 import Engine (
+    Component(..),
+    SingleInputSystem,
+    System(..),
     SystemKey,
+    ShareMap,
+    SystemInput(..),
+    SystemOutput(..),
+    Modification(..),
+    EngineJob(..),
     enableSystem,
     Entity(..),
-    newEntity,
-    System,
+    addComponent,
     Game,
-    Component(..),
-    SystemOutput(..),
-    replaceComponent)
+    )
 
 -- | Console System that prints out a "name"
 
@@ -26,10 +31,10 @@ consoleKey = "ConSys"
 -- Interface
 
 newConsole :: Entity -> Entity
-newConsole = replaceComponent consoleKey consoleDefault
+newConsole = addComponent consoleKey consoleDefault
 
 addMessage :: String -> Entity -> Entity
-addMessage msg = replaceComponent consoleKey (VALUE (toDyn msg))
+addMessage msg = addComponent consoleKey (VALUE (toDyn msg))
 
 enableConsole :: Game -> Game
 enableConsole =  enableSystem consoleKey console
@@ -43,9 +48,18 @@ cast :: Component -> String
 cast (VALUE c) = fromDyn c
 cast _         = ""
 
-console :: System
-console comp = SystemOutput {
-    io = [putStrLn (cast comp)],
-    component = comp,
-    new = []
+console :: System 
+console = SINGLE consoleImpl
+
+consoleImpl :: SingleInputSystem
+consoleImpl SystemInput {component=comp} = SystemOutput {
+    modification = Modification {
+            modified = comp,
+            delete = False,
+            newShares = Map.empty
+        },
+    job = EngineJob {
+        io = [putStrLn (cast comp)],
+        added = []
+        }
 }

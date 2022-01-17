@@ -13,23 +13,34 @@ module Engine (
     -- * Entity
     -- $entity
     Entity,
+    addComponent,
+    addComponentWith,
     newEntityFromList,
-    addEntity,
     getComponent,
     singletonEntity,
 
     -- * System
     -- $system
-    SystemKey,
     SingleInputSystem,
-    System,
+    MultiInputSystem,
+    System(..),
+    
+    SystemKey,
+    SharingKey,
+    ShareMap,
+    EngineJob(..),
+    Modification(..),
+    SystemInput(..),
+    toSystemInput,
     SystemOutput(..),
 
     -- * Game
     -- $game
     Game(..),
     enableSystem,
-    runFrame,
+    enableSystemsAfter,
+    addEntity,
+    runFrames,
     runGame
 ) where
 
@@ -64,6 +75,7 @@ type Component = DynamicHolder
 -}
 type Entity = Map.Map SystemKey Component
 
+-- Private
 getComponent :: SystemKey -> Entity -> Component
 getComponent k e = (!) e k
 
@@ -74,6 +86,7 @@ addComponentWith = Map.insertWith
 addComponent :: SystemKey -> Component -> Entity -> Entity
 addComponent = addComponentWith const
 
+-- Private
 addComponentAssert :: SystemKey -> Component -> Entity -> Entity
 addComponentAssert = addComponentWith (error "Key Collision Insert")
 
@@ -138,7 +151,7 @@ instance Mergeable EngineJob where
 data Modification = Modification {
     modified :: Component,
     delete :: Bool,
-    shared :: ShareMap
+    newShares :: ShareMap
 }
 
 -- We cannot merge or create modification due to component.
@@ -194,19 +207,22 @@ enableSystem key sys g@(Game{systems=sysMap, dependency=deps}) =
         newDependency = DependencyTree.insert key deps
 
 -- Copied from enabled system due to DependencyTree optimization
-enableSystemAfter :: SystemKey -> System -> [SystemKey] -> Game -> Game
-enableSystemAfter key sys keys g@(Game{systems=sysMap, dependency=deps}) =
+enableSystemsAfter :: SystemKey -> System -> [SystemKey] -> Game -> Game
+enableSystemsAfter key sys keys g@(Game{systems=sysMap, dependency=deps}) =
     (.) (replaceSystems newSystems) (replaceDependency newDependency) g
     where
         newSystems = Map.insert key sys sysMap
         newDependency = foldr (`DependencyTree.depend` key) deps keys
 
+-- Private
 replaceSystems :: Map.Map SystemKey System -> Game -> Game
 replaceSystems sys g = g{systems = sys}
 
+-- Private
 replaceDependency :: DependencyTree SystemKey -> Game -> Game
 replaceDependency dep g = g{dependency=dep}
 
+-- Private
 replaceEntities :: [Entity] -> Game -> Game
 replaceEntities e g = g{entities = e}
 
@@ -220,6 +236,15 @@ runGame game = do {
     runGame modifiedGame
 }
 
+runFrames :: Int -> Game -> IO ()
+runFrames 0 _ = pure ()
+runFrames num game = do {
+    (io, modifiedGame) <- return (runFrame game);
+    foldr (>>) (pure ()) io;
+    runFrames (num - 1) modifiedGame
+}
+
+-- Private
 runFrame :: Game -> ([IO ()], Game)
 runFrame g@(Game{
         systems=sysMap,
@@ -239,6 +264,7 @@ data SystemOutputFold = SystemOutputFold {
     delete :: Bool
 }
 
+-- Private
 newSystemOutputFold :: Entity -> SystemOutputFold
 newSystemOutputFold e = SystemOutputFold {
     jobs = new :: EngineJob,
@@ -247,10 +273,12 @@ newSystemOutputFold e = SystemOutputFold {
     delete = False
 }
 
+-- Private
 newSystemOutputFolds :: [Entity] -> [SystemOutputFold]
 newSystemOutputFolds = map newSystemOutputFold
 
--- It is assumed that the systme output has to do with the same entity as the 
+-- Private
+-- It is assumed that the system output has to do with the same entity as the 
 -- SystemOutputFold. Thus the modified entity stays the same through the frame.
 applyOutputToFold :: SystemKey -> Maybe SystemOutput -> SystemOutputFold -> SystemOutputFold
 applyOutputToFold _ Nothing fold = fold
@@ -258,7 +286,7 @@ applyOutputToFold
     key
 
     (Just SystemOutput {
-        modification = Modification {modified=comp, delete=del', shared=shared'},
+        modification = Modification {modified=comp, delete=del', newShares=shared'},
         job = job'
     })
 
@@ -271,10 +299,11 @@ applyOutputToFold
         delete = del || del'
     }
 
-
+-- Private
 applyOutputToFolds :: SystemKey -> [Maybe SystemOutput] -> [SystemOutputFold] -> [SystemOutputFold]
 applyOutputToFolds key = zipWith (applyOutputToFold key)
 
+-- Private
 -- I considered having a readonly list of entities here... 
 -- but we are doing some major assertion work anyways and the computation
 -- seemed to get pretty unoptimized when working with a secondary list outside of SystemOutputFold
@@ -312,6 +341,7 @@ runMultiSystem filter sys maybeInputs = keepOrder outputs maybeInputs
         mapBatchToOutputs = Map.map sys mapBatchToInputs
         outputs = batchToInOrder mapBatchToOutputs (reverse maybeBatches)
 
+-- Private
 batchToInOrder :: Map.Map Int [Maybe SystemOutput] -> [Maybe Int] -> [Maybe SystemOutput]
 batchToInOrder m [] | Map.null m = []
                     | otherwise = error "System Provided More Outputs than Inputs"
@@ -336,5 +366,5 @@ outputsToNewFrame = foldr outputToNewFrame ([], [])
 
 -- Private
 outputToNewFrame :: SystemOutputFold -> ([IO ()], [Entity]) -> ([IO ()], [Entity])
-outputToNewFrame SystemOutputFold{modified=mod, jobs=EngineJob{io=ioj, added=addedj}, delete=False} (ios, es) = (ios ++ ioj, mod : addedj)
-outputToNewFrame SystemOutputFold{modified=mod, jobs=EngineJob{io=ioj, added=addedj}, delete=True} (ios, es) = (ios ++ ioj, addedj)
+outputToNewFrame SystemOutputFold{modified=mod, jobs=EngineJob{io=ioj, added=addedj}, delete=False} (ios, es) = (ios ++ ioj, mod : addedj ++ es)
+outputToNewFrame SystemOutputFold{modified=mod, jobs=EngineJob{io=ioj, added=addedj}, delete=True} (ios, es) = (ios ++ ioj, addedj ++ es)

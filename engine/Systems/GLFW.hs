@@ -4,21 +4,24 @@ module Systems.GLFW (
     enableGLFW
 ) where
 
-import Data.Map(findWithDefault)
+import qualified Data.Map as Map
 import Graphics.UI.GLFW ( Window )
-import Dynamic (Dynamic, DynamicallyAware(..), DynamicHolder(..))
+import Core.Dynamic (Dynamic, DynamicallyAware(..), DynamicHolder(..))
 import Engine (
-    SystemKey,
-    enableSystem,
-    Entity,
-    System,
-    SystemOutput(..),
-    Game,
     Component(..),
-    insertComponent,
-    insertComponents,
-    adjustDefaultComponent,
-    adjustComponent)
+    MultiInputSystem,
+    System(..),
+    SystemKey,
+    ShareMap,
+    SystemInput(..),
+    SystemOutput(..),
+    Modification(..),
+    EngineJob(..),
+    enableSystem,
+    Entity(..),
+    addComponent,
+    Game,
+    )
 
 -- | System to translate Actions to Window Contexts. Depdenency for a lot of other systems.
 
@@ -29,24 +32,39 @@ glfwKey = "glfwSys"
 -- Interface
 
 newGLFW :: Entity -> Entity
-newGLFW = insertComponent glfwKey glfwDefault
+newGLFW = addComponent glfwKey glfwDefault
 
 -- TODO Fix
 addGLFW :: Entity -> Entity 
-addGLFW = adjustDefaultComponent glfwKey [] glfwDefault
+addGLFW = newGLFW
 
 enableGLFW :: Game -> Game 
 enableGLFW = enableSystem glfwKey glfw
 
 -- Implmentation
 
-glfwDefault :: [Component]
-glfwDefault = [VALUE (toDyn "Hello World")]
+glfwDefault :: Component
+glfwDefault = VALUE (toDyn "derp Depr Derp")
 
--- TODO Fix
+cast :: Component -> String
+cast (VALUE c) = fromDyn c
+cast _         = ""
+
 glfw :: System
-glfw comps = SystemOutput {
-    io = [],
-    entity = comps,
-    new = []
+glfw = ALL glfwImpl
+
+glfwImpl :: MultiInputSystem
+glfwImpl = map (Just . glfwImplSingle)
+
+glfwImplSingle :: SystemInput -> SystemOutput
+glfwImplSingle SystemInput {component=comp} = SystemOutput {
+    modification = Modification {
+            modified = comp,
+            delete = False,
+            newShares = Map.empty
+        },
+    job = EngineJob {
+        io = [putStrLn (cast comp)],
+        added = []
+        }
 }
