@@ -7,7 +7,7 @@ import SDK(
     Game,
     )
 import Systems.Console(enableConsole)
-import Entities.Actor(actor, actorCustom)
+import Entities.Triangle(triangle)
 
 {-
 
@@ -19,7 +19,5 @@ exampleGame :: Game
 exampleGame = foldl (\ arg x -> x arg) (new :: Game)
     [ 
           enableConsole 
-        , addEntity (actorCustom "This is an Entity 1") 
-        , addEntity (actorCustom "This Is an Entity 2")
-        , addEntity (actorCustom "This Is an Entity 3")
+        , addEntity triangle
     ]
