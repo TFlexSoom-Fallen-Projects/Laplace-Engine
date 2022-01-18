@@ -4,18 +4,23 @@ module Systems.Console (
     enableConsole
 ) where
 
-import Data.Map(findWithDefault)
-import Dynamic (Dynamic, DynamicallyAware(..), DynamicHolder(..))
+import qualified Data.Map as Map
+import Core.Dynamic (Dynamic, DynamicallyAware(..), DynamicHolder(..))
 import Engine (
-    SystemKey,
-    enableSystem,
-    Entity,
-    System,
-    Game,
     Component(..),
+    SingleInputSystem,
+    System(..),
+    SystemKey,
+    ShareMap,
+    SystemInput(..),
     SystemOutput(..),
-    insertComponent,
-    adjustDefaultComponent)
+    Modification(..),
+    EngineJob(..),
+    enableSystem,
+    Entity(..),
+    addComponent,
+    Game,
+    )
 
 -- | Console System that prints out a "name"
 
@@ -26,28 +31,35 @@ consoleKey = "ConSys"
 -- Interface
 
 newConsole :: Entity -> Entity
-newConsole = insertComponent consoleKey consoleDefault
+newConsole = addComponent consoleKey consoleDefault
 
 addMessage :: String -> Entity -> Entity
-addMessage msg = adjustDefaultComponent consoleKey [VALUE (toDyn msg)] consoleDefault
+addMessage msg = addComponent consoleKey (VALUE (toDyn msg))
 
 enableConsole :: Game -> Game
 enableConsole =  enableSystem consoleKey console
 
 -- Implementation
 
-consoleDefault :: [Component]
-consoleDefault = [VALUE (toDyn "Hello World")]
+consoleDefault :: Component
+consoleDefault = VALUE (toDyn "Hello World")
 
-concatValues :: [Component] -> String
-concatValues = concatMap cast
-    where 
-        cast (VALUE c) = fromDyn c
-        cast _ = ""
+cast :: Component -> String
+cast (VALUE c) = fromDyn c
+cast _         = ""
 
-console :: System
-console comps = SystemOutput {
-    io = [putStrLn (concatValues comps)],
-    entity = comps,
-    new = []
+console :: System 
+console = SINGLE consoleImpl
+
+consoleImpl :: SingleInputSystem
+consoleImpl SystemInput {component=comp} = SystemOutput {
+    modification = Modification {
+            modified = comp,
+            delete = False,
+            newShares = Map.empty
+        },
+    job = EngineJob {
+        io = [putStrLn (cast comp)],
+        added = []
+        }
 }
