@@ -10,8 +10,8 @@ Structure Modelled off of: [Haskelleton](http://taylor.fausak.me/2014/03/04/hask
 # Build From Source
 0. Install the [The Cabal Build System with GHC](https://www.haskell.org/downloads/#platform)
 1. `git clone https://github.com/TFlexSoom/Laplace-Engine`
-2. `cabal build --allow-newer`
-3. Executable will be located in `dist-newstyle\build\x86_64-windows\ghc-8.10.2\Laplace-Engine-0.0.0\x\Laplace-Engine\build\Laplace-Engine\Laplace-Engine.exe`
+2. `stack build`
+3. `stack exec Laplace-Engine-exec`
 
 ## Run with cabal
 The project is also configured to simply use `cabal run` to run the application without creating an executable.
@@ -22,8 +22,7 @@ Currently, the project is not finished, however, the goal is to create games wit
 # How to (Unit) Test
 0. Install the [The Cabal Build System with GHC](https://www.haskell.org/downloads/#platform)
 1. `git clone https://github.com/TFlexSoom/Laplace-Engine`
-2. `cabal configure --enable-tests`
-3. `cabal test`
+2. `stack test`
 
 # Contact
 * Tristan Hilbert
