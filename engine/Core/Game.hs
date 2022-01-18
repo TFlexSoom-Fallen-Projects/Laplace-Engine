@@ -1,39 +1,5 @@
 {-# LANGUAGE DuplicateRecordFields #-}
--- |Engine for running the Game containers. Users should be submitting configurations 
--- of Game Objects to the Engine module to be run infinitely. See 'runGame'!
---
--- In contrast, the other provided datatypes ('Entity', 'System', and 'Component') are
--- features for extending the functionality of the engine. It may also be convenient for
--- third parties to implement systems and consolidate system/component groups for entities.
-module Engine (
-    -- * Component
-    -- $component
-    Component(..),
-
-    -- * Entity
-    -- $entity
-    Entity,
-    addComponent,
-    addComponentWith,
-    newEntityFromList,
-    getComponent,
-    singletonEntity,
-
-    -- * System
-    -- $system
-    SingleInputSystem,
-    MultiInputSystem,
-    System(..),
-    
-    SystemKey,
-    SharingKey,
-    ShareMap,
-    EngineJob(..),
-    Modification(..),
-    SystemInput(..),
-    toSystemInput,
-    SystemOutput(..),
-
+module Core.Game (
     -- * Game
     -- $game
     Game(..),
@@ -47,131 +13,29 @@ module Engine (
 -- Base Imports
 import Data.Map((!))
 import qualified Data.Map as Map
-import qualified Data.Set as Set
 import Data.Maybe(fromMaybe, catMaybes, mapMaybe)
 
--- Rewritten Dynamic Wheel for Heterogeneous lists
-import Core.Dynamic (Dynamic, DynamicallyAware, DynamicHolder)
+import Core.SystemKey (SystemKey)
+import Core.Component (Component(..))
+import Core.Entity (Entity)
+import Core.System (
+    SingleInputSystem,
+    MultiInputSystem,
+    System(..),
+    
+    SystemKey,
+    SharingKey,
+    ShareMap,
+    EngineJob(..),
+    Modification(..),
+    SystemInput(..),
+    toSystemInput,
+    SystemOutput(..),
+    )
+
 import Core.Util (Creatable(..), Mergeable(..), mergeUnsafe, apply, defaultNothing, assert)
 import qualified Core.DependencyTree as DependencyTree
 import Core.DependencyTree (DependencyTree)
-
-{-$component
-    =__Component:__
-    Dynamic Data for a entity. Each System has it's own version of a DynamicHolder representing a collection
-    of data. Think like fields on a Java Object. These fields of the instance are carried under the tree of data.
-    Since the types of the data are hidden from the engine, the engine trusts the systems to be responsible for 
-    handling all cases of the data. Poor casts should result in static errors for Engine development and runtime 
-    errors for game development
--}
-
-type Component = DynamicHolder
-
-{-$entity
-    =__Entity:__
-    Data Holder
-    Holds the attached/acting Systems on the piece of data represented through Map's key
-    Holds possible callstack of previous System Actions (Component)
--}
-type Entity = Map.Map SystemKey Component
-
--- Private
-getComponent :: SystemKey -> Entity -> Component
-getComponent k e = (!) e k
-
-addComponentWith :: (Component -> Component -> Component)
-    -> SystemKey -> Component -> Entity -> Entity
-addComponentWith = Map.insertWith
-
-addComponent :: SystemKey -> Component -> Entity -> Entity
-addComponent = addComponentWith const
-
--- Private
-addComponentAssert :: SystemKey -> Component -> Entity -> Entity
-addComponentAssert = addComponentWith (error "Key Collision Insert")
-
--- Private
-getMaybeComponent :: SystemKey -> Entity -> Maybe Component
-getMaybeComponent = Map.lookup
-
-newEntityFromList :: [Entity -> Entity] -> Entity
-newEntityFromList = foldl (\ arg x -> x arg) Map.empty
-
-singletonEntity :: SystemKey -> Component -> Entity
-singletonEntity k c = Map.insert k c Map.empty
-
-{-$system
-    =__System:__
-    Acting Agent
-    Takes a Data Holder, performs work on it and possibly adding to a 
-    stack on instructions sent to the operating system
-
-    ==__Laws:__
-    1. Every System should have a SystemKey
-    2. (len input) == (len output)
--}
-type SingleInputSystem = SystemInput -> SystemOutput
-type MultiInputSystem = [SystemInput] -> [Maybe SystemOutput]
-
-data System = SINGLE SingleInputSystem
-    --                        V Can be any Ord instance
-    | BATCH  (SystemInput -> Maybe Int) MultiInputSystem
-    | ALL                               MultiInputSystem
-
-{-|
-    ==__SystemKey: __
-    Key to access Component on an Entity
-    Each System should have it's own unique key to show existance on an entity
--}
-type SystemKey = String
-type SharingKey = String
--- TODO Keys would be better as 64 bit integers than strings
-
-type ShareMap = Map.Map SharingKey Component
-
--- Work for the engine that is not dependent on the entity
-data EngineJob = EngineJob {
-    io :: [IO ()],
-    added :: [Entity]
-}
-
-instance Creatable EngineJob where
-    new = EngineJob {
-        io = [],
-        added = []
-    }
-
-instance Mergeable EngineJob where
-    merge job job' = job {
-        io = io job ++ io job',
-        added = added job ++ added job'
-    }
-
--- Work for the engine that is dependent on the entity
-data Modification = Modification {
-    modified :: Component,
-    delete :: Bool,
-    newShares :: ShareMap
-}
-
--- We cannot merge or create modification due to component.
-
--- Tuple Job and Modification for Output of each system
-data SystemOutput = SystemOutput {
-    modification :: Modification,
-    job :: EngineJob
-}
-
-data SystemInput = SystemInput {
-    shared :: ShareMap,
-    component :: Component
-}
-
-toSystemInput :: ShareMap -> Component -> SystemInput
-toSystemInput shared comp = SystemInput {
-    shared = shared,
-    component = comp
-}
 
 {-$game
     =__Game:__

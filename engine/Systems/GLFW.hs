@@ -7,8 +7,10 @@ module Systems.GLFW (
 import qualified Data.Map as Map
 import Graphics.UI.GLFW ( Window )
 import Core.Dynamic (Dynamic, DynamicallyAware(..), DynamicHolder(..))
-import Engine (
-    Component(..),
+import Core.Component(Component(..))
+import Core.Entity(Entity, addComponent)
+import Core.Game(Game, enableSystem)
+import Core.System (
     MultiInputSystem,
     System(..),
     SystemKey,
@@ -17,10 +19,6 @@ import Engine (
     SystemOutput(..),
     Modification(..),
     EngineJob(..),
-    enableSystem,
-    Entity(..),
-    addComponent,
-    Game,
     )
 
 -- | System to translate Actions to Window Contexts. Depdenency for a lot of other systems.

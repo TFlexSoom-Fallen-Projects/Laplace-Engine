@@ -9,12 +9,15 @@ module SDK (
     runGame
 ) where
 
--- | Used to Isolate individaul functions from The Engine as a public interface.
-import Engine(
-    Component(..),
-    Entity,
+import Core.Component (Component(..))
+
+import Core.Entity (
+    Entity, 
     newEntityFromList,
-    Game,
+    )
+
+import Core.Game (
+    Game, 
     addEntity,
     runFrames,
     runGame,

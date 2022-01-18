@@ -1,62 +1,84 @@
-cabal-version: 2.4
-name: Laplace-Engine
-version:  0.1.0.0
-build-type: Simple
-copyright: 2020 Tristan Hilbert
-license: MIT
-synopsis: Some Hacked together Haskell
-author: TFlexSoom
-maintainer: tchilbert@live.com
+cabal-version: 1.12
 
--- A longer description of the package.
--- description:
+-- This file has been generated from package.yaml by hpack version 0.34.4.
+--
+-- see: https://github.com/sol/hpack
 
--- A URL where users can report bugs.
--- bug-reports:
-
--- A copyright notice.
--- category:
-
+name:           Laplace-Engine
+version:        0.1.0.0
+description:    Please see the README on GitHub at <https://github.com/tflexsoom/Laplace-Engine#readme>
+homepage:       https://github.com/tflexsoom/Laplace-Engine#readme
+bug-reports:    https://github.com/tflexsoom/Laplace-Engine/issues
+author:         Author name here
+maintainer:     example@example.com
+copyright:      2022 Author name here
+license:        BSD3
+license-file:   LICENSE
+build-type:     Simple
 extra-source-files:
-    CHANGELOG.md
     README.md
+    CHANGELOG.md
 
--- Main Library
-library Engine
-    exposed-modules: SDK, Systems.Console, Systems.GLFW, Systems.Input, Entities.Actor, Entities.Triangle
-    other-modules: Engine, Core.DependencyTree, Core.Dynamic, Core.Util
-    default-language: Haskell2010
-    hs-source-dirs: engine, engine/Systems, engine/Entities
-    build-depends: base, containers, OpenGL == 3.0.*, GLFW-b == 3.3.*
+source-repository head
+  type: git
+  location: https://github.com/tflexsoom/Laplace-Engine
 
-library ExampleGame
-    exposed-modules: ExampleGame
-    default-language: Haskell2010
-    hs-source-dirs: game
-    build-depends: base, Engine
+library
+  exposed-modules:
+      Core.Component
+      Core.DependencyTree
+      Core.Dynamic
+      Core.Entity
+      Core.Game
+      Core.System
+      Core.SystemKey
+      Core.Util
+      Entities.Actor
+      Entities.Triangle
+      SDK
+      Systems.Console
+      Systems.GLFW
+      Systems.Input
+  other-modules:
+      Paths_Laplace_Engine
+  hs-source-dirs:
+      engine
+  build-depends:
+      GLFW-b >=3.3 && <4
+    , OpenGL ==3.*
+    , base >=4.7 && <5
+    , containers
+  default-language: Haskell2010
 
--- Documentation Generation Flag
-flag documentation
-    default: False
+executable Laplace-Engine-exe
+  main-is: Main.hs
+  other-modules:
+      ExampleGame
+      Paths_Laplace_Engine
+  hs-source-dirs:
+      executable
+      game
+  ghc-options: -threaded -rtsopts -with-rtsopts=-N -fno-ghci-sandbox
+  build-depends:
+      GLFW-b >=3.3 && <4
+    , Laplace-Engine
+    , OpenGL ==3.*
+    , base >=4.7 && <5
+    , containers
+  default-language: Haskell2010
 
--- Tests Definition
-test-suite hspec
-    build-depends: base, containers, Engine, ExampleGame, hspec == 2.7.*, QuickCheck == 2.14.*
-    other-modules: Engine.SDKSpec
-    default-language: Haskell2010
-    hs-source-dirs: test-suite, test-suite/engine
-    main-is: Spec.hs
-    type: exitcode-stdio-1.0
-
--- Executable Definition
-executable Laplace-Engine
-    main-is:          Main.hs
-
-    -- Modules included in this executable, other than Main.
-    -- other-modules:
-
-    -- LANGUAGE extensions used by modules in this package.
-    -- other-extensions:
-    build-depends:    base >= 4.14.1.0, Engine, ExampleGame
-    hs-source-dirs:   executable
-    default-language: Haskell2010
+test-suite Laplace-Engine-Stack-test
+  type: exitcode-stdio-1.0
+  main-is: Spec.hs
+  other-modules:
+      Paths_Laplace_Engine
+  hs-source-dirs:
+      test-suite
+  ghc-options: -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      GLFW-b >=3.3 && <4
+    , Laplace-Engine
+    , OpenGL ==3.*
+    , base >=4.7 && <5
+    , containers
+  default-language: Haskell2010

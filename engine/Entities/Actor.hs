@@ -3,7 +3,7 @@ module Entities.Actor(
   actorCustom
 ) where
 
-import Engine(Entity, newEntityFromList)
+import Core.Entity(Entity, newEntityFromList)
 import Systems.Console(newConsole, addMessage)
 
 -- | Pre-made Actor Entity

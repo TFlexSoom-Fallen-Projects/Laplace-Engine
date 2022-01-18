@@ -6,8 +6,10 @@ module Systems.Console (
 
 import qualified Data.Map as Map
 import Core.Dynamic (Dynamic, DynamicallyAware(..), DynamicHolder(..))
-import Engine (
-    Component(..),
+import Core.Component(Component(..))
+import Core.Entity(Entity, addComponent)
+import Core.Game(Game, enableSystem)
+import Core.System (
     SingleInputSystem,
     System(..),
     SystemKey,
@@ -16,10 +18,6 @@ import Engine (
     SystemOutput(..),
     Modification(..),
     EngineJob(..),
-    enableSystem,
-    Entity(..),
-    addComponent,
-    Game,
     )
 
 -- | Console System that prints out a "name"
