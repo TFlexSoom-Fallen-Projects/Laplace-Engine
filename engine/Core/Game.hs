@@ -1,7 +1,10 @@
 {-# LANGUAGE DuplicateRecordFields #-}
+{-|
+    =__Game:__
+    List of entities which can be filtered with system system key map. Entities will then
+    used their captured lambdas to perform the work of the game.
+-}
 module Core.Game (
-    -- * Game
-    -- $game
     Game(..),
     enableSystem,
     enableSystemsAfter,
@@ -37,11 +40,6 @@ import Core.Util (Creatable(..), Mergeable(..), mergeUnsafe, apply, defaultNothi
 import qualified Core.DependencyTree as DependencyTree
 import Core.DependencyTree (DependencyTree)
 
-{-$game
-    =__Game:__
-    List of entities which can be filtered with system system key map. Entities will then
-    used their captured lambdas to perform the work of the game.
--}
 data Game = Game {
     systems :: Map.Map SystemKey System,
     dependency :: DependencyTree.DependencyTree SystemKey,

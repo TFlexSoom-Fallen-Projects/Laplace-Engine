@@ -1,7 +1,15 @@
 {-# LANGUAGE DuplicateRecordFields #-}
+{-
+    =__System:__
+    Acting Agent
+    Takes a Data Holder, performs work on it and possibly adding to a 
+    stack on instructions sent to the operating system
+
+    ==__Laws:__
+    1. Every System should have a SystemKey
+    2. (len input) == (len output)
+-}
 module Core.System (
-    -- * System
-    -- $system
     SingleInputSystem,
     MultiInputSystem,
     System(..),
@@ -25,16 +33,6 @@ import Core.Component (Component(..))
 import Core.Entity (Entity)
 import Core.Util (Creatable(..), Mergeable(..), mergeUnsafe, apply, defaultNothing, assert)
 
-{-$system
-    =__System:__
-    Acting Agent
-    Takes a Data Holder, performs work on it and possibly adding to a 
-    stack on instructions sent to the operating system
-
-    ==__Laws:__
-    1. Every System should have a SystemKey
-    2. (len input) == (len output)
--}
 type SingleInputSystem = SystemInput -> SystemOutput
 type MultiInputSystem = [SystemInput] -> [Maybe SystemOutput]
 

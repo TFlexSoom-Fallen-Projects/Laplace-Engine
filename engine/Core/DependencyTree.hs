@@ -27,7 +27,7 @@ import Core.Util (Creatable(..), Mergeable(..))
 -- more transparency then we would need either more data or a better
 -- algorithm.
 
-data Ord a => DependencyTree a = DependencyTree {
+data DependencyTree a = DependencyTree {
     allMembers :: Set.Set a,
     depQueue :: [Set.Set a]
 }
@@ -71,7 +71,7 @@ notMember a DependencyTree{allMembers=allMembers} = Set.notMember a allMembers
 
 -- Private
 registerMember :: Ord a => a -> DependencyTree a -> DependencyTree a
-registerMember a tree@(DependencyTree{allMembers=allMembers}) =
+registerMember a tree@DependencyTree{allMembers=allMembers} =
     tree{allMembers = Set.insert a allMembers}
 
 -- Private
@@ -85,15 +85,15 @@ depQueueList DependencyTree{depQueue=depQueue} = depQueueList' depQueue
 depQueueList' :: Ord a => [Set.Set a] -> [(a, a)]
 depQueueList' [] = []
 depQueueList' [x] = []
-depQueueList' ( dependencies : dependents : xs ) = 
+depQueueList' ( dependencies : dependents : xs ) =
     Set.foldr perDependency [] dependencies ++ depQueueList' xs
-    where 
+    where
         perDependency a lst = Set.foldr (perDependentBinded a) lst dependents
         perDependentBinded a b lst = (a, b) : lst
 
 -- Due to FIXME below it is optimal to use depend > insert
 insert :: Ord a => a -> DependencyTree a -> DependencyTree a
-insert a tree 
+insert a tree
     | member a tree = tree
     | otherwise = (.) (registerMember a) (insertAtHead a) tree
 
@@ -139,7 +139,7 @@ foldr' :: Ord a => (a -> b -> b) -> b -> DependencyTree a -> b
 foldr' = foldImpl Foldable.foldr' Set.foldr'
 
 toList :: Ord a => DependencyTree a -> [a]
-toList DependencyTree{allMembers=allMembers} = Set.toList allMembers 
+toList DependencyTree{allMembers=allMembers} = Set.toList allMembers
 
 -- Private
 type QueueWork a = a -> a -> [Set.Set a] -> [Set.Set a]
@@ -152,8 +152,8 @@ queueInsert a queue
 
 -- Private
 insertAtHead :: Ord a => a -> DependencyTree a -> DependencyTree a
-insertAtHead a tree@(DependencyTree{depQueue=[]}) = tree{depQueue = [Set.singleton a, Set.empty]} 
-insertAtHead a tree@(DependencyTree{depQueue=(x:xs)}) = tree{depQueue = queueInsert a x : xs}
+insertAtHead a tree@DependencyTree{depQueue=[]} = tree{depQueue = [Set.singleton a, Set.empty]}
+insertAtHead a tree@DependencyTree{depQueue=(x:xs)} = tree{depQueue = queueInsert a x : xs}
 
 -- Private
 doQueueWork :: Ord a => QueueWork a -> a -> a -> DependencyTree a -> DependencyTree a
@@ -208,7 +208,7 @@ assertDependency' :: Ord a => QueueWork a
 assertDependency' a b [] = failedDependencyMessage
 assertDependency' a b (x:xs)
     | Set.member a x && Set.member b x = Set.delete b x : Set.singleton b : xs
-    -- ^ FIXME: This algorithm choice leaves this as a worst case *
+    -- \^ FIXME: This algorithm choice leaves this as a worst case *
     | Set.member a x = x : assertDependencyRight' b xs
     | otherwise = x : assertDependency' a b xs
 

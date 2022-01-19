@@ -1,6 +1,10 @@
+{-|
+    =__Entity:__
+    Data Holder
+    Holds the attached/acting Systems on the piece of data represented through Map's key
+    Holds possible callstack of previous System Actions (Component)
+-}
 module Core.Entity (
-    -- * Entity
-    -- $entity
     Entity,
     addComponent,
     addComponentWith,
@@ -15,12 +19,6 @@ import qualified Data.Map as Map
 import Core.Component(Component)
 import Core.SystemKey (SystemKey)
 
-{-$entity
-    =__Entity:__
-    Data Holder
-    Holds the attached/acting Systems on the piece of data represented through Map's key
-    Holds possible callstack of previous System Actions (Component)
--}
 type Entity = Map.Map SystemKey Component
 
 -- Private

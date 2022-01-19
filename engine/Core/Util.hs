@@ -1,5 +1,3 @@
-module Core.Util where
-
 {-| =__Utility:__
     Utilities for help in defining structures and functionality for the engine.
     The goal of these is to avoid repeating myself. As I coded the engine
@@ -7,6 +5,7 @@ module Core.Util where
 
     This may include some additional classes and assertion utilities in the future
 -}
+module Core.Util where
 
 import qualified Data.Map as Map
 
