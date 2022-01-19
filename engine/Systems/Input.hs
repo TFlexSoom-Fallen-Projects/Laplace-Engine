@@ -4,20 +4,19 @@ module Systems.Input (
     -- enableInput
 ) where
 
-import qualified Data.Map as Map
 import Core.Dynamic (Dynamic, DynamicallyAware(..), DynamicHolder(..))
+import Core.SystemKey (SystemKey)
 import Core.Component(Component(..))
 import Core.Entity(Entity, addComponent)
 import Core.Game(Game, enableSystem)
 import Core.System (
+    Priority,
+    SharingKey,
+    Perspective(..),
     SingleInputSystem,
-    System(..),
-    SystemKey,
-    ShareMap,
-    SystemInput(..),
-    SystemOutput(..),
-    Modification(..),
-    EngineJob(..),
+    MultiInputSystem,
+    SystemImpl(..),
+    System(..)
     )
 
 -- | Input Systems for Keys, Joysticks, Buttons, etc.

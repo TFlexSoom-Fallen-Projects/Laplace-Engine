@@ -1,41 +1,35 @@
 module Systems.Console (
-    newConsole,
+    Console,
     addMessage,
-    enableConsole
 ) where
 
-import qualified Data.Map as Map
 import Core.Dynamic (Dynamic, DynamicallyAware(..), DynamicHolder(..))
+import Core.SystemKey (SystemKey)
 import Core.Component(Component(..))
 import Core.Entity(Entity, addComponent)
-import Core.Game(Game, enableSystem)
 import Core.System (
+    Perspective(..),
     SingleInputSystem,
-    System(..),
-    SystemKey,
-    ShareMap,
-    SystemInput(..),
-    SystemOutput(..),
-    Modification(..),
-    EngineJob(..),
+    SystemImpl(..),
+    System(..)
     )
 
--- | Console System that prints out a "name"
+newtype Console = Console ()
 
--- | Key Function Required By All Systems
+instance System Console where
+    getKey _ = consoleKey
+
+    getImplementation _ = SINGLE console
+
+    initContext _ = VALUE (toDyn ())
+
+    initComponent _ = consoleDefault
+
 consoleKey :: SystemKey
 consoleKey = "ConSys"
 
--- Interface
-
-newConsole :: Entity -> Entity
-newConsole = addComponent consoleKey consoleDefault
-
 addMessage :: String -> Entity -> Entity
 addMessage msg = addComponent consoleKey (VALUE (toDyn msg))
-
-enableConsole :: Game -> Game
-enableConsole =  enableSystem consoleKey console
 
 -- Implementation
 
@@ -46,18 +40,5 @@ cast :: Component -> String
 cast (VALUE c) = fromDyn c
 cast _         = ""
 
-console :: System 
-console = SINGLE consoleImpl
-
-consoleImpl :: SingleInputSystem
-consoleImpl SystemInput {component=comp} = SystemOutput {
-    modification = Modification {
-            modified = comp,
-            delete = False,
-            newShares = Map.empty
-        },
-    job = EngineJob {
-        io = [putStrLn (cast comp)],
-        added = []
-        }
-}
+console :: Perspective a => SingleInputSystem a
+console modif = addIO modif ((putStrLn . (cast . getComponent)) modif)

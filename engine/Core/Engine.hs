@@ -211,6 +211,17 @@ instance Perspective ScopedModification where
 
     receive ScopedModification{modified=Modification{shared=shared}} key =
         (!) shared key
+    
+    addIO sm io = addIOs sm [io]
+
+    addIOs sm@ScopedModification{modified=modified@Modification{io=io}} io' = 
+        sm{modified=modified{io = io ++ io'}}
+
+    addEntity sm e = addEntities sm [e]
+
+    addEntities sm@ScopedModification{modified=modified@Modification{added=added}} added' = 
+        sm{modified=modified{added = added ++ added'}}
+
 
 scopeModification :: SystemKey -> Context -> Modification -> ScopedModification
 scopeModification key ctxt mod = ScopedModification {

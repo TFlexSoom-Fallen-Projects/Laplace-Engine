@@ -21,6 +21,7 @@ module Core.System (
 
 import Core.SystemKey (SystemKey)
 import Core.Component (Component(..))
+import Core.Entity (Entity)
 
 type Priority = Maybe Int
 type SharingKey = String
@@ -44,6 +45,14 @@ class Perspective a where
     share :: a -> SharingKey -> Component -> a
     receive :: a -> SharingKey -> Component
 
+    -- IO
+    addIO :: a -> IO () -> a
+    addIOs :: a -> [IO ()] -> a
+
+    -- Entities
+    addEntity :: a -> Entity -> a
+    addEntities :: a -> [Entity] -> a
+
 type SingleInputSystem a = a -> a
 type MultiInputSystem a = [a] -> [Maybe a]
 
@@ -56,4 +65,5 @@ data SystemImpl a =
 class System a where
     getKey :: a -> SystemKey
     getImplementation :: Perspective b => a -> SystemImpl b
-    initContext :: a -> Component 
+    initContext :: a -> Component
+    initComponent :: a -> Component
