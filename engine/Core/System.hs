@@ -1,4 +1,3 @@
-{-# LANGUAGE DuplicateRecordFields #-}
 {-
     =__System:__
     Acting Agent
@@ -10,83 +9,51 @@
     2. (len input) == (len output)
 -}
 module Core.System (
+    -- For Engine Use Only
+    Priority,
+    SharingKey,
+    Perspective(..),
     SingleInputSystem,
     MultiInputSystem,
-    System(..),
-    
-    SystemKey,
-    SharingKey,
-    ShareMap,
-    EngineJob(..),
-    Modification(..),
-    SystemInput(..),
-    toSystemInput,
-    SystemOutput(..),
-
+    SystemImpl(..),
+    System(..)
 ) where
-
-import Data.Map((!))
-import qualified Data.Map as Map
 
 import Core.SystemKey (SystemKey)
 import Core.Component (Component(..))
-import Core.Entity (Entity)
-import Core.Util (Creatable(..), Mergeable(..), mergeUnsafe, apply, defaultNothing, assert)
 
-type SingleInputSystem = SystemInput -> SystemOutput
-type MultiInputSystem = [SystemInput] -> [Maybe SystemOutput]
-
-data System = SINGLE SingleInputSystem
-    --                        V Can be any Ord instance
-    | BATCH  (SystemInput -> Maybe Int) MultiInputSystem
-    | ALL                               MultiInputSystem
-
-
+type Priority = Maybe Int
 type SharingKey = String
 -- TODO Keys would be better as 64 bit integers than strings
 
-type ShareMap = Map.Map SharingKey Component
+class Perspective a where
+    -- Modifications to Domain
+    getComponent :: a -> Component
+    alterComponent :: a -> (Component -> Maybe Component) -> a
+    setComponent :: a -> Component -> a
 
--- Work for the engine that is not dependent on the entity
-data EngineJob = EngineJob {
-    io :: [IO ()],
-    added :: [Entity]
-}
+    -- Modifications to Context
+    getContext :: a -> Component
+    alterContext :: a -> (Component -> Maybe Component) -> a
+    setContext :: a -> Component -> a
 
-instance Creatable EngineJob where
-    new = EngineJob {
-        io = [],
-        added = []
-    }
+    -- Modifications to Domain's Owner
+    setToDelete :: a -> a
 
-instance Mergeable EngineJob where
-    merge job job' = job {
-        io = io job ++ io job',
-        added = added job ++ added job'
-    }
+    -- Sharing (is caring ;) )
+    share :: a -> SharingKey -> Component -> a
+    receive :: a -> SharingKey -> Component
 
--- Work for the engine that is dependent on the entity
-data Modification = Modification {
-    modified :: Component,
-    delete :: Bool,
-    newShares :: ShareMap
-}
+type SingleInputSystem a = a -> a
+type MultiInputSystem a = [a] -> [Maybe a]
 
--- We cannot merge or create modification due to component.
+data SystemImpl a = 
+     SINGLE (SingleInputSystem a)
+    --              V Can be any Ord instance
+    | BATCH  (a -> Priority) (MultiInputSystem a)
+    | ALL                    (MultiInputSystem a)
 
--- Tuple Job and Modification for Output of each system
-data SystemOutput = SystemOutput {
-    modification :: Modification,
-    job :: EngineJob
-}
-
-data SystemInput = SystemInput {
-    shared :: ShareMap,
-    component :: Component
-}
-
-toSystemInput :: ShareMap -> Component -> SystemInput
-toSystemInput shared comp = SystemInput {
-    shared = shared,
-    component = comp
-}
+class System a where
+    getKey :: a -> SystemKey
+    getImplementation :: Perspective b => a -> SystemImpl b
+    initContext :: a -> Component 

@@ -28,6 +28,7 @@ library
       Core.Component
       Core.DependencyTree
       Core.Dynamic
+      Core.Engine
       Core.Entity
       Core.Game
       Core.System

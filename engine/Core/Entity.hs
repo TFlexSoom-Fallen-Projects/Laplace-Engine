@@ -5,10 +5,15 @@
     Holds possible callstack of previous System Actions (Component)
 -}
 module Core.Entity (
+    -- Public
     Entity,
-    addComponent,
-    addComponentWith,
     newEntityFromList,
+
+    -- For System Use Only
+    addComponent, 
+    addComponentWith,
+    
+    -- For Engine Use Only
     getComponent,
     singletonEntity,
 ) where
@@ -21,7 +26,6 @@ import Core.SystemKey (SystemKey)
 
 type Entity = Map.Map SystemKey Component
 
--- Private
 getComponent :: SystemKey -> Entity -> Component
 getComponent k e = (!) e k
 
@@ -32,11 +36,9 @@ addComponentWith = Map.insertWith
 addComponent :: SystemKey -> Component -> Entity -> Entity
 addComponent = addComponentWith const
 
--- Private
 addComponentAssert :: SystemKey -> Component -> Entity -> Entity
 addComponentAssert = addComponentWith (error "Key Collision Insert")
 
--- Private
 getMaybeComponent :: SystemKey -> Entity -> Maybe Component
 getMaybeComponent = Map.lookup
 
