@@ -3,26 +3,14 @@ module SDK (
     Component(..),
     Entity,
     newEntityFromList,
-    Game,
-    addEntity,
-    runFrames,
-    runGame
+    game,
+    addToGame,
+    Game(..),
+    GameImpl
 ) where
 
-import Core.Component (Component(..))
-
-import Core.Entity (
-    Entity, 
-    newEntityFromList,
-    )
-
-import Core.Game (
-    Game, 
-    addEntity,
-    runFrames,
-    runGame,
-    )
-
-import Core.Util(
-    Creatable(..),
-    )
+import Core.Component ( Component(..) )
+import Core.Entity ( Entity, newEntityFromList )
+import Core.Game ( Game(..), addToGame )
+import Core.Util( Creatable(..) )
+import Core.Engine( game, GameImpl )

@@ -4,10 +4,13 @@ import SDK(
     Creatable(..),
     newEntityFromList,
     addEntity,
-    Game,
+    Game(..),
+    game,
+    addToGame,
+    GameImpl,
     )
-import Systems.Console(enableConsole)
 import Entities.Triangle(triangle)
+import Systems.Console(console)
 
 {-
 
@@ -15,9 +18,14 @@ Tristan Hilbert
 An example Game Built With Engine
 
 -}
-exampleGame :: Game
-exampleGame = foldl (\ arg x -> x arg) (new :: Game)
-    [ 
-          enableConsole 
+exampleGame :: GameImpl
+exampleGame = addToGame [
+          enable console
         , addEntity triangle
-    ]
+    ] game 
+
+-- exampleGame = foldl (\ arg x -> x arg) game
+--     [ 
+--           enableConsole 
+--         , addEntity triangle
+--     ]

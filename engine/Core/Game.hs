@@ -5,6 +5,7 @@
 -}
 module Core.Game (
     Game(..),
+    addToGame,
 ) where
 
 import Core.SystemKey (SystemKey)
@@ -13,7 +14,10 @@ import Core.Entity (Entity)
 import Core.System (System)
 
 class Game a where 
-    enableSystem :: System b => b -> a -> a
+    enable :: System b => b -> a -> a
     addEntity :: Entity -> a -> a
     runFrames :: Int -> a -> IO ()
     runGame :: a -> IO ()
+
+addToGame :: Game a => [a -> a] -> a -> a
+addToGame lambdas g = foldr ($) g lambdas

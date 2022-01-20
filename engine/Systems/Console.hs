@@ -1,5 +1,5 @@
 module Systems.Console (
-    Console,
+    console,
     addMessage,
 ) where
 
@@ -19,11 +19,14 @@ newtype Console = Console ()
 instance System Console where
     getKey _ = consoleKey
 
-    getImplementation _ = SINGLE console
+    getImplementation _ = SINGLE consoleImpl
 
     initContext _ = VALUE (toDyn ())
 
     initComponent _ = consoleDefault
+
+console :: Console
+console = Console ()
 
 consoleKey :: SystemKey
 consoleKey = "ConSys"
@@ -40,5 +43,5 @@ cast :: Component -> String
 cast (VALUE c) = fromDyn c
 cast _         = ""
 
-console :: Perspective a => SingleInputSystem a
-console modif = addIO modif ((putStrLn . (cast . getComponent)) modif)
+consoleImpl :: Perspective a => SingleInputSystem a
+consoleImpl modif = addIO modif ((putStrLn . (cast . getComponent)) modif)

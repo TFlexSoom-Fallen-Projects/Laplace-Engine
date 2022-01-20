@@ -23,6 +23,7 @@ import Core.SystemKey (SystemKey)
 import Core.Component (Component(..))
 import Core.Entity (Entity)
 
+--    V Can be any Ord instance
 type Priority = Maybe Int
 type SharingKey = String
 -- TODO Keys would be better as 64 bit integers than strings
@@ -57,8 +58,7 @@ type SingleInputSystem a = a -> a
 type MultiInputSystem a = [a] -> [Maybe a]
 
 data SystemImpl a = 
-     SINGLE (SingleInputSystem a)
-    --              V Can be any Ord instance
+      SINGLE (SingleInputSystem a)
     | BATCH  (a -> Priority) (MultiInputSystem a)
     | ALL                    (MultiInputSystem a)
 

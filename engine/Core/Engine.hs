@@ -4,7 +4,7 @@
     Implementation of all classes
 -}
 module Core.Engine (
-    Game(..),
+    GameImpl,
     game
 ) where
 
@@ -88,7 +88,7 @@ instance Mergeable GameImpl where
     }
 
 instance Game GameImpl where
-    enableSystem sys g@GameImpl{systems=sysMap, dependency=deps, context=ctxt} =
+    enable sys g@GameImpl{systems=sysMap, dependency=deps, context=ctxt} =
         (.) (replaceSystems newSystems) (
             (.) (replaceDependency newDependency)
                 (replaceContext newContext)
@@ -160,7 +160,7 @@ instance Mergeable Modification where
         mod{
             io = io ++ io',
             added = added ++ added',
-            owner = mergeUnsafe owner owner',
+            owner = Map.union owner owner',
             shared = Map.union shared shared',
             delete = del || del'
         } 
