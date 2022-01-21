@@ -223,6 +223,8 @@ instance Perspective ScopedModification where
         sm{modified=modified{added = added ++ added'}}
 
 
+-- TODO Modifications should include multiple entities for MultiInput systems.
+-- Contexts should be the same across Entity Runs.
 scopeModification :: SystemKey -> Context -> Modification -> ScopedModification
 scopeModification key ctxt mod = ScopedModification {
     key = key,

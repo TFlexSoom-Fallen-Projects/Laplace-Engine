@@ -11,6 +11,7 @@ import SDK(
     )
 import Entities.Triangle(triangle)
 import Systems.Console(console)
+import Systems.GLFW(glfw)
 
 {-
 
@@ -20,7 +21,7 @@ An example Game Built With Engine
 -}
 exampleGame :: GameImpl
 exampleGame = addToGame [
-          enable console
+          enable glfw
         , addEntity triangle
     ] game 
 

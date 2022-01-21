@@ -3,9 +3,11 @@ module Entities.Triangle(
 ) where
 
 import Core.Entity(Entity, newEntityFromList)
-import Systems.Console(addMessage)
+import Systems.GLFW(addGraphics)
 
 -- | Pre-made Actor Entity
 
 triangle :: Entity
-triangle = newEntityFromList [addMessage "I am a Triangle"]
+triangle = newEntityFromList [addGraphics]
+
+-- TODO Bug with empty entities
