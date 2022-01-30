@@ -39,14 +39,16 @@ executables:
     - -threaded
     - -rtsopts
     - -with-rtsopts=-N
-    - -fno-ghci-sandbox
+    # - -fno-ghci-sandbox
     dependencies:
     - Laplace-Engine
 
 tests:
   Laplace-Engine-Stack-test:
     main:                Spec.hs
-    source-dirs:         test-suite
+    source-dirs:         
+    - test
+    - game
     ghc-options:
     - -threaded
     - -rtsopts

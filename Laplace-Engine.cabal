@@ -59,7 +59,7 @@ executable Laplace-Engine-exe
   hs-source-dirs:
       executable
       game
-  ghc-options: -threaded -rtsopts -with-rtsopts=-N -fno-ghci-sandbox
+  ghc-options: -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       GLFW-b >=3.3 && <4
     , Laplace-Engine
@@ -72,9 +72,11 @@ test-suite Laplace-Engine-Stack-test
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   other-modules:
+      ExampleGame
       Paths_Laplace_Engine
   hs-source-dirs:
-      test-suite
+      test
+      game
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       GLFW-b >=3.3 && <4

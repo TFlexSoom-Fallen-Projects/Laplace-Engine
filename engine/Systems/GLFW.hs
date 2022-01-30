@@ -94,14 +94,11 @@ uncast c = VALUE (toDyn c)
 
 glfwImpl :: Perspective a => MultiInputSystem a
 glfwImpl [] = error "Tristan Failed in the graphics department TODO"
-glfwImpl modifs = do {
-        setContext (head modifs) (fst tplIONewContext) : tail modifs;
-        addIOs (head modifs) (snd tplIONewContext) : tail modifs;
+glfwImpl modifs = do
+        modifs <- return (setContext (head modifs) (fst tplIONewContext) : tail modifs)
+        modifs <- return (addIOs (head modifs) (snd tplIONewContext) : tail modifs)
         map (Just . glfwIter) modifs
-    }
     where tplIONewContext = glfwInitComp (getContext (head modifs))
-
-
 
 glfwInitComp :: Component -> (Component, [IO ()])
 glfwInitComp comp = first uncast result
@@ -111,6 +108,8 @@ glfwInitSwitch :: GLFWInstance -> (GLFWInstance, [IO ()])
 glfwInitSwitch inst@GLFWInstance{started=False} = (inst, [glfwInit])
 glfwInitSwitch inst@GLFWInstance{started=True} = (inst, [])
 
+
+-- TODO Fix
 glfwInit :: IO ()
 glfwInit = do
     b <- GLFW.init
@@ -118,51 +117,9 @@ glfwInit = do
     GLFW.defaultWindowHints
     Just win <- GLFW.createWindow 480 480 "GLFW Tutorial" Nothing Nothing
     GLFW.makeContextCurrent (Just win)
-    GLFW.setWindowSizeCallback  win (Just resizeWindow)
-    GLFW.setKeyCallback         win (Just keyPressed  )
-    GLFW.setWindowCloseCallback win (Just shutdown    )
-    onDisplay win $ maybe display4Cubes displayPrimitive (Just GL.Triangles)
+    onDisplay win display4Cubes
+    GLFW.makeContextCurrent Nothing
   where log = putStrLn
-
-resizeWindow :: GLFW.WindowSizeCallback
-resizeWindow win w h =
-  do
-    GL.viewport   $= (GL.Position 0 0, GL.Size (fromIntegral w) (fromIntegral h))
-    GL.matrixMode $= GL.Projection
-    GL.loadIdentity
-    GL.ortho2D 0 (realToFrac w) (realToFrac h) 0
-
-keyPressed :: GLFW.KeyCallback
-keyPressed win GLFW.Key'Escape _ GLFW.KeyState'Pressed _ = shutdown win
-keyPressed _   _               _ _                     _ = return ()
-
-shutdown :: GLFW.WindowCloseCallback
-shutdown win = do
-  GLFW.destroyWindow win
-  GLFW.terminate
-  _ <- exitSuccess
-  return ()
-
-glfwIter :: Perspective a => a -> a
-glfwIter modif = modif
-
-onDisplay :: Window -> IO () -> IO ()
-onDisplay win io = do
-  GL.clear [ColorBuffer]
-  io
-  GLFW.swapBuffers win
-
-  forever $ do
-     GLFW.pollEvents
-     onDisplay win io
-
-myPoints :: [(GL.GLfloat,GL.GLfloat,GL.GLfloat)]
-myPoints = [ (sin (2*pi*k/12), cos (2*pi*k/12), 0) | k <- [1..12] ]
-
-displayPrimitive :: PrimitiveMode -> IO ()
-displayPrimitive pm =
-  GL.renderPrimitive
-  pm $ mapM_ (\(x, y, z) -> vertex $ Vertex3 x y z) myPoints
 
 display4Cubes :: IO ()
 display4Cubes = do
@@ -196,3 +153,11 @@ display4Cubes = do
 
 
 
+glfwIter :: Perspective a => a -> a
+glfwIter modif = modif
+
+onDisplay :: Window -> IO () -> IO ()
+onDisplay win io = do
+  GL.clear [ColorBuffer]
+  io
+  GLFW.swapBuffers win

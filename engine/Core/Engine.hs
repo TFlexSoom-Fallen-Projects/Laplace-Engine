@@ -269,9 +269,9 @@ runMultiSystem filter sys maybeInputs = keepOrder outputs maybeInputs
     where
         inputs = catMaybes maybeInputs
         maybeBatches = map filter inputs
-        batches = catMaybes maybeBatches
-        mapBatchToInputs = foldr folder Map.empty (zip batches inputs)
-        folder (num, input) = Map.alter (Just . (:) input . fromMaybe []) num
+        mapBatchToInputs = foldr folder Map.empty (zip maybeBatches inputs)
+        folder (Nothing, input) = id
+        folder (Just num, input) = Map.alter (Just . (:) input . fromMaybe []) num
         mapBatchToOutputs = Map.map sys mapBatchToInputs
         outputs = batchToInOrder mapBatchToOutputs (reverse maybeBatches)
 
@@ -280,7 +280,8 @@ batchToInOrder m [] | Map.null m = []
                     | otherwise = error "System Provided More Outputs than Inputs"
 batchToInOrder m (Nothing : xs) = Nothing : batchToInOrder m xs
 batchToInOrder m ((Just x) : xs)
-                    | Map.member x m && not (null lst) = head lst : batchToInOrder (Map.insert x (tail lst) m) xs
+                    | Map.member x m && length lst > 1 = head lst : batchToInOrder (Map.insert x (tail lst) m) xs
+                    | Map.member x m && not (null lst) = head lst : batchToInOrder (Map.delete x m) xs
                     | otherwise = error "Engine Mapping Error"
     where lst = (!) m x
 
