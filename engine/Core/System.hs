@@ -12,11 +12,11 @@ module Core.System (
     -- For Engine Use Only
     Priority,
     SharingKey,
-    Perspective(..),
-    SingleInputSystem,
-    MultiInputSystem,
-    SystemImpl(..),
-    System(..)
+    EntityPerspective(..),
+    FramePerspective(..),
+    SystemPartition(..),
+    System(..),
+    defaultPriority,
 ) where
 
 import Core.SystemKey (SystemKey)
@@ -26,44 +26,50 @@ import Core.Entity (Entity)
 --    V Can be any Ord instance
 type Priority = Maybe Int
 type SharingKey = String
+
+defaultPriority :: Priority
+defaultPriority = Just 1
+
 -- TODO Keys would be better as 64 bit integers than strings
 
-class Perspective a where
-    -- Modifications to Domain
-    getComponent :: a -> Component
-    alterComponent :: a -> (Component -> Maybe Component) -> a
-    setComponent :: a -> Component -> a
+class EntityPerspective e where
+    setKey :: SystemKey -> e -> e
+
+    getComponent :: e -> Component 
+    setComponent :: e -> Component -> e
+    alterComponent :: e -> (Maybe Component -> Maybe Component) -> e
+    deleteComponent :: e -> e
+
+    share :: e -> SharingKey -> Component -> e
+    receive :: e -> SharingKey -> Maybe Component
+
+    setToDelete :: e -> e
+
+
+class FramePerspective f where
+    -- Modifications to Entity
+    alterEntities :: EntityPerspective e => f -> (e -> e) -> f
 
     -- Modifications to Context
-    getContext :: a -> Component
-    alterContext :: a -> (Component -> Maybe Component) -> a
-    setContext :: a -> Component -> a
-
-    -- Modifications to Domain's Owner
-    setToDelete :: a -> a
-
-    -- Sharing (is caring ;) )
-    share :: a -> SharingKey -> Component -> a
-    receive :: a -> SharingKey -> Component
+    getContext :: f-> Component
+    alterContext :: f -> (Maybe Component -> Maybe Component) -> f
+    setContext :: f -> Component -> f
 
     -- IO
-    addIO :: a -> IO () -> a
-    addIOs :: a -> [IO ()] -> a
+    addIO :: f -> IO () -> f
+    addIOs :: f -> [IO ()] -> f
 
     -- Entities
-    addEntity :: a -> Entity -> a
-    addEntities :: a -> [Entity] -> a
+    addEntity :: f -> Entity -> f
+    addEntities :: f -> [Entity] -> f
 
-type SingleInputSystem a = a -> a
-type MultiInputSystem a = [a] -> [Maybe a]
-
-data SystemImpl a = 
-      SINGLE (SingleInputSystem a)
-    | BATCH  (a -> Priority) (MultiInputSystem a)
-    | ALL                    (MultiInputSystem a)
+data SystemPartition a = 
+      ALL
+    | BATCH  (a -> Priority)
 
 class System a where
     getKey :: a -> SystemKey
-    getImplementation :: Perspective b => a -> SystemImpl b
+    getPartition :: FramePerspective f => a -> SystemPartition f
+    getImplementation :: FramePerspective f => a -> f -> f
     initContext :: a -> Component
     initComponent :: a -> Component

@@ -13,9 +13,6 @@ Structure Modelled off of: [Haskelleton](http://taylor.fausak.me/2014/03/04/hask
 2. `stack build`
 3. `stack exec Laplace-Engine-exec`
 
-## Run with cabal
-The project is also configured to simply use `cabal run` to run the application without creating an executable.
-
 # How to Use Project
 Currently, the project is not finished, however, the goal is to create games with minimal haskell code and a documented API. This is done through an Entity Component System similar to that in other game engines. Under `game` there is a module called `ExampleGame.hs` which represents how a new game is created. (In the future, it may be better to create a `.ini` or `.json` file to carry this data instead.) The goal is to use the data placed in this format to create the entire game.
 

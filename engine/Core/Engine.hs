@@ -19,11 +19,11 @@ import Core.Entity ( Entity )
 import Core.System (
     Priority,
     SharingKey,
-    Perspective(..),
-    SingleInputSystem,
-    MultiInputSystem,
-    SystemImpl(..),
-    System(..)
+    FramePerspective(..),
+    EntityPerspective(..),
+    SystemPartition(..),
+    System(..),
+    defaultPriority,
     )
 import Core.Game( Game(..) )
 
@@ -40,14 +40,23 @@ game = new :: GameImpl
 
 type Context = Entity
 
+data SystemWork = SystemWork {
+    partition :: FramePerspectiveImpl -> Priority,
+    transform :: FramePerspectiveImpl -> FramePerspectiveImpl
+}
+
+createSystemWork :: SystemPartition FramePerspectiveImpl -> (FramePerspectiveImpl -> FramePerspectiveImpl) -> SystemWork
+createSystemWork ALL transform = SystemWork{partition=const defaultPriority, transform=transform}
+createSystemWork (BATCH partition) tranform = SystemWork{partition=partition, transform=transform}
+
 data GameImpl = GameImpl {
-    systems :: Map.Map SystemKey (SystemImpl ScopedModification),
+    systems :: Map.Map SystemKey SystemWork,
     dependency :: DependencyTree.DependencyTree SystemKey,
     context :: Context,
     entities :: [Entity]
 }
 
-replaceSystems :: Map.Map SystemKey (SystemImpl ScopedModification) -> GameImpl -> GameImpl
+replaceSystems :: Map.Map SystemKey SystemWork -> GameImpl -> GameImpl
 replaceSystems sys g = g{systems = sys}
 
 replaceDependency :: DependencyTree SystemKey -> GameImpl -> GameImpl
@@ -67,8 +76,10 @@ runFrame g@GameImpl{
         entities=es
     } = (fst result, replaceEntities (snd result) g)
     where
-        sysFolds = foldOverModifications dep (sysMap !) ((context :: GameImpl -> Context) g) (newModifications es)
+        frame = newFrame ((context :: GameImpl -> Context) g) es
+        sysFolds = foldOverEntityFrames dep (sysMap !) frame
         result = outputsToNewFrame sysFolds
+        
 
 instance Creatable GameImpl where
     new = GameImpl {
@@ -96,9 +107,11 @@ instance Game GameImpl where
             g
         where
             key = getKey sys
+            sysPart = getPartition sys
             sysImpl = getImplementation sys
+            sysWork = createSystemWork sysPart sysImpl
             sysCtxt = initContext sys
-            newSystems = Map.insert key sysImpl sysMap
+            newSystems = Map.insert key sysWork sysMap
             newDependency = DependencyTree.insert key deps
             newContext = Map.insert key sysCtxt ctxt
 
@@ -132,139 +145,141 @@ instance Game GameImpl where
 type ShareMap = Map.Map SharingKey Component
 
 -- Private
-data Modification = Modification {
-    io :: [IO ()],
-    added :: [Entity],
+data EntityModification = EntityModification {
+    key :: Maybe SystemKey,
     owner :: Entity,
     shared :: ShareMap,
     delete :: Bool
 }
 
-newModification :: Entity -> Modification
-newModification e = Modification {
-    io = [],
-    added = [],
+newEntityModification :: Entity -> EntityModification
+newEntityModification e = EntityModification {
+    key = Nothing,
     owner = e,
     shared = Map.empty,
     delete = False
 }
 
-newModifications :: [Entity] -> [Modification]
-newModifications = map newModification
+newEntityModifications :: [Entity] -> [EntityModification]
+newEntityModifications = map newEntityModification
 
-instance Mergeable Modification where
+instance Mergeable EntityModification where
     merge 
-        mod@Modification{io=io, added=added, owner=owner, shared=shared, delete=del} 
-        Modification{io=io', added=added', owner=owner', shared=shared', delete=del'} 
+        mod@EntityModification{owner=owner, shared=shared, delete=del} 
+        EntityModification{owner=owner', shared=shared', delete=del'} 
         =
         mod{
-            io = io ++ io',
-            added = added ++ added',
+            key = Nothing,
             owner = Map.union owner owner',
             shared = Map.union shared shared',
             delete = del || del'
-        } 
+        }
 
-data ScopedModification = ScopedModification {
-    key :: SystemKey,
+instance EntityPerspective EntityModification where
+    setKey k impl = impl{key=Just k}
+
+    getComponent EntityModification{key=(Just k), owner=owner} = 
+        (!) owner k
+    getComponent EntityModification{key=Nothing} = error "Key Not Set"
+
+    setComponent impl@EntityModification{key=(Just k), owner=owner} comp = 
+        impl{owner=Map.insert k comp owner}
+    setComponent EntityModification{key=Nothing} _ = error "Key Not Set"
+
+    alterComponent impl@EntityModification{key=(Just k), owner=owner} alteration = 
+        impl{owner=Map.alter alteration k owner}
+    alterComponent EntityModification{key=Nothing} _ = error "Key Not Set"
+
+    deleteComponent impl@EntityModification{key=(Just k), owner=owner} = 
+        impl{owner=Map.delete k owner}
+    deleteComponent EntityModification{key=Nothing} = error "Key Not Set"
+    
+    share impl@EntityModification{shared=shared} k comp = 
+        impl{shared=Map.insert k comp shared}
+
+    receive EntityModification{shared=shared} k = 
+        Map.lookup k shared
+
+    setToDelete impl = impl{delete=True}
+
+
+data Frame = Frame {
+    io :: [IO ()],
+    add :: [Entity],
     context :: Context,
-    modified :: Modification
+    mods :: [EntityModification]
 }
 
-instance Perspective ScopedModification where
-    getComponent ScopedModification{key=key, modified=Modification{owner=owner}} =
-        (!) owner key
-
-    alterComponent sm@ScopedModification{key=key, modified=modified@Modification{owner=owner}} alterer =
-        sm{modified = modified{owner =
-            Map.alter (alterer . fromJust) key owner
-        }}
-    
-    setComponent sm@ScopedModification{key=key, modified=modified@Modification{owner=owner}} comp =
-        sm{modified = modified{owner =
-            Map.insert key comp owner
-        }}
-    
-    -- Context
-    getContext ScopedModification{key=key, context=ctxt} = 
-        (!) ctxt key
-    
-    alterContext sm@ScopedModification{key=key, context=ctxt} alterer =
-        sm{context = 
-            Map.alter (alterer . fromJust) key ctxt
-        }
-    
-    setContext sm@ScopedModification{key=key, context=ctxt} comp =
-        sm{context = 
-            Map.insert key comp ctxt
-        }
-    
-    -- Modification to Owner
-    setToDelete sm@ScopedModification{modified=modified} =
-        sm{modified = modified{delete = True}}
-
-    -- Sharing (is caring ;) )
-    share sm@ScopedModification{modified=modified@Modification{shared=shared}} key comp =
-        sm{modified = modified{shared =
-            Map.insert key comp shared
-        }}
-
-    receive ScopedModification{modified=Modification{shared=shared}} key =
-        (!) shared key
-    
-    addIO sm io = addIOs sm [io]
-
-    addIOs sm@ScopedModification{modified=modified@Modification{io=io}} io' = 
-        sm{modified=modified{io = io ++ io'}}
-
-    addEntity sm e = addEntities sm [e]
-
-    addEntities sm@ScopedModification{modified=modified@Modification{added=added}} added' = 
-        sm{modified=modified{added = added ++ added'}}
-
-
--- TODO Modifications should include multiple entities for MultiInput systems.
--- Contexts should be the same across Entity Runs.
-scopeModification :: SystemKey -> Context -> Modification -> ScopedModification
-scopeModification key ctxt mod = ScopedModification {
-    key = key,
+newFrame :: Context -> [Entity] -> Frame
+newFrame ctxt es = Frame {
+    io = [],
+    add = [],
     context = ctxt,
-    modified = mod
+    mods = newEntityModifications es
 }
 
-maybeScopeModificaiton :: SystemKey -> Context -> Modification -> Maybe ScopedModification
-maybeScopeModificaiton key ctxt mod@Modification{owner=owner} 
-    | Map.member key owner = Just (scopeModification key ctxt mod)
-    | otherwise = Nothing                                                            
+instance Mergeable Frame where
+    merge 
+        mod@Frame{io=io, add=add, context=ctxt, mods=mods}
+        Frame{io=io', add=add', context=ctxt', mods=mods'}
+        =
+        mod{
+            io = io ++ io',
+            add = add ++ add',
+            context = Map.union ctxt ctxt',
+            mods = zipWith merge mods mods'
+        }
+    
 
--- It is assumed that the system output has to do with the same entity as the 
--- Modification. Thus the modified entity stays the same through the frame.
-applyOutputToFold :: SystemKey -> Maybe ScopedModification -> Modification -> Modification
-applyOutputToFold _ Nothing fold = fold
-applyOutputToFold key (Just ScopedModification {modified = mod}) modFold = merge modFold mod
+data FramePerspectiveImpl = FramePerspectiveImpl {
+    key :: SystemKey,
+    frame :: Frame
+}
 
-applyOutputToFolds :: SystemKey -> [Maybe ScopedModification] -> [Modification] -> [Modification]
-applyOutputToFolds key = zipWith (applyOutputToFold key)
+newFramePerspective :: SystemKey -> Frame -> FramePerspectiveImpl
+newFramePerspective key f = FramePerspectiveImpl {
+    key = key,
+    frame = f
+}
 
--- I considered having a readonly list of entities here... 
--- but we are doing some major assertion work anyways and the computation
--- seemed to get pretty unoptimized when working with a secondary list outside of Modification
--- Consider: Maybe include readonly entity in SystmeOutputFold datatype.
-foldOverModifications :: DependencyTree SystemKey -> (SystemKey -> SystemImpl ScopedModification) -> Context -> [Modification] -> [Modification]
-foldOverModifications deps sysGetter ctxt sysFolds = DependencyTree.foldr' (folder ctxt) sysFolds deps
-    where
-        folder ctxt' key sysFolds' = applyOutputToFolds key (getOutput key (map (maybeScopeModificaiton key ctxt') sysFolds')) sysFolds'
-        getOutput key' = runSystem (sysGetter key')
+instance FramePerspective FramePerspectiveImpl where
+    -- Modifications to Entity
+    alterEntities impl@FramePerspectiveImpl{key=k, frame=frame@Frame{mods=ms}} alteration = 
+        impl{frame=frame{mods= map (setKey k) ms}}
 
-runSystem :: Perspective a => SystemImpl a -> [Maybe a] -> [Maybe a]
-runSystem (SINGLE sys) = map (runSingleSystem sys)
-runSystem (BATCH filter sys) = runMultiSystem filter sys
-runSystem (ALL sys) = runMultiSystem (const (Just 0)) sys
+    -- Modifications to Context
+    getContext FramePerspectiveImpl{key=k, frame=Frame{context=ctxt}} = (!) ctxt k
+    alterContext impl@FramePerspectiveImpl{key=k, frame=frame@Frame{context=ctxt}} alteration = 
+        impl{frame=frame{context= Map.alter alteration k ctxt}}
+    setContext impl@FramePerspectiveImpl{key=k, frame=frame@Frame{context=ctxt}} comp = 
+        impl{frame=frame{context=Map.insert k comp ctxt}}
 
-runSingleSystem :: Perspective a => SingleInputSystem a -> Maybe a -> Maybe a
-runSingleSystem sys = defaultNothing (Just . sys)
+    -- IO
+    addIO impl io = addIOs impl [io]
+    addIOs impl@FramePerspectiveImpl{frame=frame@Frame{io=ios}} ios' = 
+        impl{frame=frame{io=ios ++ ios'}}
 
-runMultiSystem :: Perspective a => (a -> Priority) -> MultiInputSystem a -> [Maybe a] -> [Maybe a]
+    -- Entities
+    addEntity impl e = addEntities impl [e]
+    addEntities impl@FramePerspectiveImpl{frame=frame@Frame{add=es}} es' = 
+        impl{frame=frame{add=es ++ es'}}
+
+
+transformFrame :: DependencyTree SystemKey -> (SystemKey -> SystemWork) -> Frame -> Frame
+transformFrame deps sysGetter frame = DependencyTree.foldr' foldWithKeys frame deps
+    where 
+        foldWithKeys key = foldr' (sysImpl key) (partitionFrame sysPartition frame)
+        sysPartition key = (partition :: SystemWork -> (FramePerspectiveImpl -> Priority)) (sys key)
+        sysImpl key = (transform :: SystemWork -> (FramePerspectiveImpl -> FramePerspectiveImpl)) (sys key)
+        sys key = sysGetter key
+
+
+
+
+runSystem :: FramePerspective a => a -> a
+runSystem sys = sys
+
+runMultiSystem :: FramePerspective a => (a -> Priority) -> SystemWork -> [Maybe a] -> [Maybe a]
 runMultiSystem filter sys maybeInputs = keepOrder outputs maybeInputs
     where
         inputs = catMaybes maybeInputs
@@ -275,7 +290,7 @@ runMultiSystem filter sys maybeInputs = keepOrder outputs maybeInputs
         mapBatchToOutputs = Map.map sys mapBatchToInputs
         outputs = batchToInOrder mapBatchToOutputs (reverse maybeBatches)
 
-batchToInOrder :: Perspective a => Map.Map Int [Maybe a] -> [Priority] -> [Maybe a]
+batchToInOrder :: FramePerspective a => Map.Map Int [Maybe a] -> [Priority] -> [Maybe a]
 batchToInOrder m [] | Map.null m = []
                     | otherwise = error "System Provided More Outputs than Inputs"
 batchToInOrder m (Nothing : xs) = Nothing : batchToInOrder m xs
@@ -287,17 +302,13 @@ batchToInOrder m ((Just x) : xs)
 
 
 -- Assumes first list is in the same order as the second
-keepOrder :: Perspective a => [Maybe a] -> [Maybe a] -> [Maybe a]
+keepOrder :: FramePerspective a => [Maybe a] -> [Maybe a] -> [Maybe a]
 keepOrder [] [] = []
 keepOrder [] ((Just y) : ys) = error "System Gave Smaller Number of Outputs"
 keepOrder (x : xs) [] = error "System Gave Larger Number of Outputs"
 keepOrder (x : xs) ((Just y) : ys) = x : keepOrder xs ys
 keepOrder lst (Nothing : ys) = Nothing : keepOrder lst ys
 
--- TODO Add Context
-outputsToNewFrame :: [Modification] -> ([IO ()], [Entity])
-outputsToNewFrame = foldr outputToNewFrame ([], [])
-
-outputToNewFrame :: Modification -> ([IO ()], [Entity]) -> ([IO ()], [Entity])
-outputToNewFrame Modification{io=ioj, added=addedj, owner=owner, delete=False} (ios, es) = (ios ++ ioj, owner : addedj ++ es)
-outputToNewFrame Modification{io=ioj, added=addedj, owner=owner, delete=True} (ios, es) = (ios ++ ioj, addedj ++ es)
+-- TODO
+outputsToNewFrame :: Frame -> ([IO ()], [Entity])
+outputsToNewFrame f = ([], [])
