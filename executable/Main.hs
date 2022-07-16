@@ -1,7 +1,7 @@
 module Main (main) where
 
-import SDK(runGame, runFrames)
 import ExampleGame (exampleGame)
+import SDK (runFrames, runGame)
 
 -- main :: IO ()
 -- main = runGame exampleGame

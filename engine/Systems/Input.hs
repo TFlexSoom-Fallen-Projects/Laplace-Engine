@@ -1,23 +1,26 @@
-module Systems.Input (
-    -- newInput,
-    -- addInput,
-    -- enableInput
-) where
+module Systems.Input
+  (
+  )
+where
 
-import Core.Dynamic (Dynamic, DynamicallyAware(..), DynamicHolder(..))
-import Core.SystemKey (SystemKey)
-import Core.Component(Component(..))
-import Core.Entity(Entity, addComponent)
-import Core.Game(Game)
-import Core.System (
+-- newInput,
+-- addInput,
+-- enableInput
+
+import Core.Component (Component (..))
+import Core.Dynamic (Dynamic, DynamicHolder (..), DynamicallyAware (..))
+import Core.Entity (Entity, addComponent)
+import Core.Game (Game)
+import Core.System
+  ( MultiInputSystem,
+    Perspective (..),
     Priority,
     SharingKey,
-    Perspective(..),
     SingleInputSystem,
-    MultiInputSystem,
-    SystemImpl(..),
-    System(..)
-    )
+    System (..),
+    SystemImpl (..),
+  )
+import Core.SystemKey (SystemKey)
 
 -- | Input Systems for Keys, Joysticks, Buttons, etc.
 
@@ -29,16 +32,16 @@ inputKey = "inputSys"
 
 -- TODO make instance of DynamicallyAware
 data InputType = BUTTON | RANGE_1D | RANGE_2D | RANGE_3D | ENCODED
-    deriving Show
+  deriving (Show)
 
 -- newInput :: Entity -> Entity
 -- newInput = insertComponent inputKey inputDefault
 
 -- -- TODO FIX
--- addInput :: InputType -> Entity -> Entity 
+-- addInput :: InputType -> Entity -> Entity
 -- addInput t = adjustDefaultComponent inputKey [] inputDefault
 
--- enableInput :: Game -> Game 
+-- enableInput :: Game -> Game
 -- enableInput = enableSystem inputKey input
 
 -- -- Implmentation

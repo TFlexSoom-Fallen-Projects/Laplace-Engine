@@ -1,12 +1,12 @@
-module Entities.Triangle(
-  triangle
-) where
+module Entities.Triangle
+  ( triangle,
+  )
+where
 
-import Core.Entity(Entity, newEntityFromList)
-import Systems.GLFW(addGraphics)
+import Core.Entity (Entity, newEntityFromList)
+import Systems.GLFW (addGraphics)
 
 -- | Pre-made Actor Entity
-
 triangle :: Entity
 triangle = newEntityFromList [addGraphics]
 

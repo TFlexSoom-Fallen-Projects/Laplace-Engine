@@ -1,17 +1,17 @@
 module ExampleGame (exampleGame) where
 
-import SDK(
-    Creatable(..),
-    newEntityFromList,
-    addEntity,
-    Game(..),
-    game,
-    addToGame,
+import Entities.Triangle (triangle)
+import SDK
+  ( Creatable (..),
+    Game (..),
     GameImpl,
-    )
-import Entities.Triangle(triangle)
-import Systems.Console(console)
-import Systems.GLFW(glfw)
+    addEntity,
+    addToGame,
+    game,
+    newEntityFromList,
+  )
+import Systems.Console (console)
+import Systems.GLFW (glfw)
 
 {-
 
@@ -20,13 +20,15 @@ An example Game Built With Engine
 
 -}
 exampleGame :: GameImpl
-exampleGame = addToGame [
-          enable glfw
-        , addEntity triangle
-    ] game 
+exampleGame =
+  addToGame
+    [ enable glfw,
+      addEntity triangle
+    ]
+    game
 
 -- exampleGame = foldl (\ arg x -> x arg) game
---     [ 
---           enableConsole 
+--     [
+--           enableConsole
 --         , addEntity triangle
 --     ]
