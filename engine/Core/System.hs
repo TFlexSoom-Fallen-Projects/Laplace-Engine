@@ -46,9 +46,6 @@ class EntityPerspective e where
   setToDelete :: e -> e
 
 class FramePerspective f where
-  -- Modifications to Entity
-  alterEntities :: EntityPerspective e => f -> ([e] -> [e]) -> f
-
   -- Modifications to Context
   getContext :: f -> Component
   alterContext :: f -> (Maybe Component -> Maybe Component) -> f
@@ -64,6 +61,6 @@ class FramePerspective f where
 
 class System a where
   getKey :: a -> SystemKey
-  getImplementation :: FramePerspective f => a -> f -> f
+  getImplementation :: (FramePerspective f, EntityPerspective e) => a -> (f, [e]) -> (f, [e])
   initContext :: a -> Component
   initComponent :: a -> Component

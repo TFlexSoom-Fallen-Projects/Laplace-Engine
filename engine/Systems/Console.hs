@@ -8,10 +8,7 @@ import Core.Component (Component (..))
 import Core.Dynamic (Dynamic, DynamicHolder (..), DynamicallyAware (..))
 import Core.Entity (Entity, addComponent)
 import Core.System
-  ( Perspective (..),
-    SingleInputSystem,
-    System (..),
-    SystemImpl (..),
+  ( System (..),
   )
 import Core.SystemKey (SystemKey)
 
@@ -20,7 +17,7 @@ newtype Console = Console ()
 instance System Console where
   getKey _ = consoleKey
 
-  getImplementation _ = SINGLE consoleImpl
+  getImplementation _ = id
 
   initContext _ = VALUE (toDyn ())
 
@@ -44,5 +41,5 @@ cast :: Component -> String
 cast (VALUE c) = fromDyn c
 cast _ = ""
 
-consoleImpl :: Perspective a => SingleInputSystem a
-consoleImpl modif = addIO modif ((putStrLn . (cast . getComponent)) modif)
+-- consoleImpl :: Perspective a => SingleInputSystem a
+-- consoleImpl modif = addIO modif ((putStrLn . (cast . getComponent)) modif)

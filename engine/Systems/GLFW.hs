@@ -9,11 +9,8 @@ import Core.Component (Component (..))
 import Core.Dynamic (Dynamic (..), DynamicHolder (..), DynamicallyAware (..))
 import Core.Entity (Entity, addComponent)
 import Core.System
-  ( MultiInputSystem,
-    Perspective (..),
-    SharingKey,
+  ( SharingKey,
     System (..),
-    SystemImpl (..),
   )
 import Core.SystemKey (SystemKey)
 import Core.Util (Creatable (..))
@@ -56,7 +53,7 @@ instance DynamicallyAware GLFWInstance where
 instance System GLFW where
   getKey _ = glfwKey
 
-  getImplementation _ = ALL glfwImpl
+  getImplementation _ = id
 
   initContext _ = VALUE (toDyn (new :: GLFWInstance))
 
@@ -90,14 +87,14 @@ cast _ = error "Incorrect Component"
 uncast :: GLFWInstance -> Component
 uncast c = VALUE (toDyn c)
 
-glfwImpl :: Perspective a => MultiInputSystem a
-glfwImpl [] = error "Tristan Failed in the graphics department TODO"
-glfwImpl modifs = do
-  modifs <- return (setContext (head modifs) (fst tplIONewContext) : tail modifs)
-  modifs <- return (addIOs (head modifs) (snd tplIONewContext) : tail modifs)
-  map (Just . glfwIter) modifs
-  where
-    tplIONewContext = glfwInitComp (getContext (head modifs))
+-- glfwImpl :: Perspective a => MultiInputSystem a
+-- glfwImpl [] = error "Tristan Failed in the graphics department TODO"
+-- glfwImpl modifs = do
+--   modifs <- return (setContext (head modifs) (fst tplIONewContext) : tail modifs)
+--   modifs <- return (addIOs (head modifs) (snd tplIONewContext) : tail modifs)
+--   map (Just . glfwIter) modifs
+--   where
+--     tplIONewContext = glfwInitComp (getContext (head modifs))
 
 glfwInitComp :: Component -> (Component, [IO ()])
 glfwInitComp comp = first uncast result
@@ -151,8 +148,8 @@ display4Cubes = do
     vertex3f (-0.2) 0.2 0
     vertex3f (-0.2) 0 0
 
-glfwIter :: Perspective a => a -> a
-glfwIter modif = modif
+-- glfwIter :: Perspective a => a -> a
+-- glfwIter modif = modif
 
 onDisplay :: Window -> IO () -> IO ()
 onDisplay win io = do

@@ -12,13 +12,9 @@ import Core.Dynamic (Dynamic, DynamicHolder (..), DynamicallyAware (..))
 import Core.Entity (Entity, addComponent)
 import Core.Game (Game)
 import Core.System
-  ( MultiInputSystem,
-    Perspective (..),
-    Priority,
+  ( Priority,
     SharingKey,
-    SingleInputSystem,
     System (..),
-    SystemImpl (..),
   )
 import Core.SystemKey (SystemKey)
 

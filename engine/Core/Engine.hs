@@ -34,24 +34,23 @@ import Data.Maybe (catMaybes, fromJust, fromMaybe, mapMaybe)
 
 -- class Implementations --
 -----------------------------------------------------------------------------------
+
 -- |
 --   FramePerspective: Store Everything in a Tuple
 data SystemImpl = SystemImpl
-  {
-    key :: String,
-    implementation :: FramePerspectiveImpl -> FramePerspectiveImpl,
-    contextSupplier :: () -> Component
+  { key :: String,
+    implementation :: (FramePerspectiveImpl, [EntityPerspectiveImpl]) -> (FramePerspectiveImpl, [EntityPerspectiveImpl])
   }
 
-fromSystemData :: System a => a -> SystemImpl
-fromSystemData sys = SystemImpl 
-  {
-    key = getKey sys,
-    implementation = getImplementation sys,
-    contextSupplier = \ _ -> initContext sys
-  }
+castSystemToImpl :: System a => a -> SystemImpl
+castSystemToImpl sys =
+  SystemImpl
+    { key = getKey sys,
+      implementation = getImplementation sys
+    }
 
 -----------------------------------------------------------------------------------
+
 -- |
 --   Game Implementation: Store everything in a Tuple
 data GameImpl = GameImpl
@@ -84,25 +83,30 @@ runFrame
     { systems = sysMap,
       dependency = dep,
       entities = es
-    } = (fst result, replaceEntities (snd result) g)
+    } = (ioResult, gameResult)
     where
-      frameFunc k = newFrame k ((context :: GameImpl -> Context) g) es 
-      sysFolds = transformFrame dep (sysMap !) frameFunc
-      result = outputsToNewFrame sysFolds
+      frame = newFrame "" ((context :: GameImpl -> Context) g)
+      entityPs = newEntityPerspectiveImpls es
+      sysFolds = transformFrame dep (sysMap !) (frame, entityPs)
+      gameResult = mergeGameFrame sysFolds g
+      ioResult = (io :: FramePerspectiveImpl -> [IO ()]) (fst sysFolds)
 
-transformFrame :: DependencyTree SystemKey -> (SystemKey -> SystemImpl) -> (SystemKey -> FramePerspectiveImpl) -> FramePerspectiveImpl
-transformFrame deps sysGetter frameFunc = DependencyTree.foldr' foldWithKeys emptyFrame deps
-  where 
-    emptyFrame = frameFunc ""
-    foldWithKeys key = runSystem (sysImpl key) . replaceKey key
+transformFrame :: DependencyTree SystemKey -> (SystemKey -> SystemImpl) -> (FramePerspectiveImpl, [EntityPerspectiveImpl]) -> (FramePerspectiveImpl, [EntityPerspectiveImpl])
+transformFrame deps sysGetter frameData = DependencyTree.foldr' foldWithKeys frameData deps
+  where
+    foldWithKeys key = sysImpl key . cacheKey key
     sysImpl key = implementation (sysGetter key)
 
-runSystem :: FramePerspective a => a -> a
-runSystem sys = sys
+cacheKey :: SystemKey -> (FramePerspectiveImpl, [EntityPerspectiveImpl]) -> (FramePerspectiveImpl, [EntityPerspectiveImpl])
+cacheKey key (f, es) = (replaceKey key f, map (replaceKeyEntity key) es)
 
+mergeGameFrame :: (FramePerspectiveImpl, [EntityPerspectiveImpl]) -> GameImpl -> GameImpl
+mergeGameFrame (FramePerspectiveImpl {add = as, context = ctxt}, es) = replaceContext ctxt . replaceEntities consolidateEs
+  where
+    consolidateEs = mapMaybe fromEntityPerspectiveImpl es ++ as
 
-outputsToNewFrame :: FramePerspectiveImpl -> ([IO ()], [Entity])
-outputsToNewFrame FramePerspectiveImpl {io = io} = (io, [])
+getIO :: FramePerspectiveImpl -> [IO ()]
+getIO FramePerspectiveImpl {io = io} = io
 
 instance Creatable GameImpl where
   new =
@@ -131,7 +135,7 @@ instance Game GameImpl where
     where
       key = getKey sys
       sysCtxt = initContext sys
-      newSystems = Map.insert key sys sysMap
+      newSystems = Map.insert key (castSystemToImpl sys) sysMap
       newDependency = DependencyTree.insert key deps
       newContext = Map.insert key sysCtxt ctxt
 
@@ -149,6 +153,7 @@ instance Game GameImpl where
     runGame modifiedGame
 
 -----------------------------------------------------------------------------------
+
 -- |
 --   EntityPerspective: Store Everything in a Tuple
 data EntityPerspectiveImpl = EntityPerspectiveImpl
@@ -169,8 +174,15 @@ newEntityPerspectiveImpl e =
       delete = False
     }
 
+replaceKeyEntity :: SystemKey -> EntityPerspectiveImpl -> EntityPerspectiveImpl
+replaceKeyEntity k e = e {key = Just k}
+
 newEntityPerspectiveImpls :: [Entity] -> [EntityPerspectiveImpl]
 newEntityPerspectiveImpls = map newEntityPerspectiveImpl
+
+fromEntityPerspectiveImpl :: EntityPerspectiveImpl -> Maybe Entity
+fromEntityPerspectiveImpl EntityPerspectiveImpl {delete = True} = Nothing
+fromEntityPerspectiveImpl EntityPerspectiveImpl {owner = e} = Just e
 
 instance Mergeable EntityPerspectiveImpl where
   merge
@@ -211,24 +223,23 @@ instance EntityPerspective EntityPerspectiveImpl where
   setToDelete impl = impl {delete = True}
 
 -----------------------------------------------------------------------------------
+
 -- |
 --   FramePerspective: Store Everything in a Tuple
 data FramePerspectiveImpl = FramePerspectiveImpl
   { key :: SystemKey,
     io :: [IO ()],
     add :: [Entity],
-    context :: Context,
-    mods :: [EntityPerspectiveImpl]
+    context :: Context
   }
 
-newFrame :: SystemKey -> Context -> [Entity] -> FramePerspectiveImpl
-newFrame key ctxt es =
+newFrame :: SystemKey -> Context -> FramePerspectiveImpl
+newFrame key ctxt =
   FramePerspectiveImpl
     { key = key,
       io = [],
       add = [],
-      context = ctxt,
-      mods = newEntityPerspectiveImpls es
+      context = ctxt
     }
 
 replaceKey :: SystemKey -> FramePerspectiveImpl -> FramePerspectiveImpl
@@ -236,21 +247,16 @@ replaceKey key impl = impl {key = key}
 
 instance Mergeable FramePerspectiveImpl where
   merge
-    mod@FramePerspectiveImpl {io = io, add = add, context = ctxt, mods = mods}
-    FramePerspectiveImpl {io = io', add = add', context = ctxt', mods = mods'} =
+    mod@FramePerspectiveImpl {io = io, add = add, context = ctxt}
+    FramePerspectiveImpl {io = io', add = add', context = ctxt'} =
       mod
         { -- Overwrite key with left key
           io = io ++ io',
           add = add ++ add',
-          context = Map.union ctxt ctxt',
-          mods = zipWith merge mods mods'
+          context = Map.union ctxt ctxt'
         }
 
 instance FramePerspective FramePerspectiveImpl where
-  -- Modifications to Entity
-  alterEntities impl@FramePerspectiveImpl {mods = ms} alteration =
-    impl {mods = alteration ms}
-
   -- Modifications to Context
   getContext FramePerspectiveImpl {key = k, context = ctxt} = (!) ctxt k
   alterContext impl@FramePerspectiveImpl {key = k, context = ctxt} alteration =

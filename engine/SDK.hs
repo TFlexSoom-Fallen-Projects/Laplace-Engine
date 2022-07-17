@@ -1,16 +1,17 @@
-module SDK (
-    Creatable(..),
-    Component(..),
+module SDK
+  ( Creatable (..),
+    Component (..),
     Entity,
     newEntityFromList,
-    game,
+    gameV1,
     addToGame,
-    Game(..),
-    GameImpl
-) where
+    Game,
+    GameImpl,
+  )
+where
 
-import Core.Component ( Component(..) )
-import Core.Entity ( Entity, newEntityFromList )
-import Core.Game ( Game(..), addToGame )
-import Core.Util( Creatable(..) )
-import Core.Engine( game, GameImpl )
+import Core.Component (Component (..))
+import Core.Engine (GameImpl, gameV1)
+import Core.Entity (Entity, newEntityFromList)
+import Core.Game (Game, addToGame)
+import Core.Util (Creatable (..))
