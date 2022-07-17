@@ -6,7 +6,6 @@
 
     ==__Laws:__
     1. Every System should have a SystemKey
-    2. (len input) == (len output)
 -}
 module Core.System
   ( -- For Engine Use Only
@@ -14,7 +13,6 @@ module Core.System
     SharingKey,
     EntityPerspective (..),
     FramePerspective (..),
-    SystemPartition (..),
     System (..),
     defaultPriority,
   )
@@ -49,7 +47,7 @@ class EntityPerspective e where
 
 class FramePerspective f where
   -- Modifications to Entity
-  alterEntities :: EntityPerspective e => f -> (e -> e) -> f
+  alterEntities :: EntityPerspective e => f -> ([e] -> [e]) -> f
 
   -- Modifications to Context
   getContext :: f -> Component
@@ -64,13 +62,8 @@ class FramePerspective f where
   addEntity :: f -> Entity -> f
   addEntities :: f -> [Entity] -> f
 
-data SystemPartition a
-  = ALL
-  | BATCH (a -> Priority)
-
 class System a where
   getKey :: a -> SystemKey
-  getPartition :: FramePerspective f => a -> SystemPartition f
   getImplementation :: FramePerspective f => a -> f -> f
   initContext :: a -> Component
   initComponent :: a -> Component

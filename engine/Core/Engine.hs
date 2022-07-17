@@ -5,7 +5,7 @@
 --    Implementation of all classes
 module Core.Engine
   ( GameImpl,
-    game,
+    gameV1,
   )
 where
 
@@ -22,7 +22,6 @@ import Core.System
     Priority,
     SharingKey,
     System (..),
-    SystemPartition (..),
     defaultPriority,
   )
 import Core.SystemKey (SystemKey)
@@ -31,30 +30,21 @@ import Data.Map ((!))
 import qualified Data.Map as Map
 import Data.Maybe (catMaybes, fromJust, fromMaybe, mapMaybe)
 
-game :: GameImpl
-game = new :: GameImpl
-
 -------------------------   IMPLEMENTATION BELOW   ----------------------------
 
 type Context = Entity
 
-data SystemWork = SystemWork
-  { partition :: FramePerspectiveImpl -> Priority,
-    transform :: FramePerspectiveImpl -> FramePerspectiveImpl
-  }
-
-createSystemWork :: SystemPartition FramePerspectiveImpl -> (FramePerspectiveImpl -> FramePerspectiveImpl) -> SystemWork
-createSystemWork ALL transform = SystemWork {partition = const defaultPriority, transform = transform}
-createSystemWork (BATCH partition) tranform = SystemWork {partition = partition, transform = transform}
-
 data GameImpl = GameImpl
-  { systems :: Map.Map SystemKey SystemWork,
+  { systems :: Map.Map SystemKey System,
     dependency :: DependencyTree.DependencyTree SystemKey,
     context :: Context,
     entities :: [Entity]
   }
 
-replaceSystems :: Map.Map SystemKey SystemWork -> GameImpl -> GameImpl
+gameV1 :: GameImpl
+gameV1 = new :: GameImpl
+
+replaceSystems :: Map.Map SystemKey System -> GameImpl -> GameImpl
 replaceSystems sys g = g {systems = sys}
 
 replaceDependency :: DependencyTree SystemKey -> GameImpl -> GameImpl
@@ -66,7 +56,6 @@ replaceEntities e g = g {entities = e}
 replaceContext :: Entity -> GameImpl -> GameImpl
 replaceContext e g = g {context = e}
 
--- Private
 runFrame :: GameImpl -> ([IO ()], GameImpl)
 runFrame
   g@GameImpl
@@ -92,7 +81,6 @@ instance Mergeable GameImpl where
   merge g g' =
     g
       { systems = mergeUnsafe (systems g) (systems g'),
-        -- TODO Shouldn't this be merge?
         dependency = DependencyTree.union (dependency g) (dependency g'),
         context = mergeUnsafe ((context :: GameImpl -> Context) g) ((context :: GameImpl -> Context) g'),
         entities = entities g ++ entities g'
@@ -100,13 +88,10 @@ instance Mergeable GameImpl where
 
 instance Game GameImpl where
   enable sys g@GameImpl {systems = sysMap, dependency = deps, context = ctxt} =
-    (.)
-      (replaceSystems newSystems)
-      ( (.)
-          (replaceDependency newDependency)
-          (replaceContext newContext)
-      )
-      g
+    replaceSystems newSystems
+      . replaceDependency newDependency
+      . replaceContext newContext
+      $ g
     where
       key = getKey sys
       sysPart = getPartition sys
@@ -129,15 +114,6 @@ instance Game GameImpl where
     (io, modifiedGame) <- return (runFrame game)
     foldr (>>) (pure ()) io
     runGame modifiedGame
-
--- TODO Subject to change
--- Copied from enabled system due to DependencyTree optimization
--- enableSystemsAfter :: SystemKey -> System -> [SystemKey] -> Game -> Game
--- enableSystemsAfter key sys keys g@GameImpl{systems=sysMap, dependency=deps} =
---     (.) (replaceSystems newSystems) (replaceDependency newDependency) g
---     where
---         newSystems = Map.insert key sys sysMap
---         newDependency = foldr (`DependencyTree.depend` key) deps keys
 
 type ShareMap = Map.Map SharingKey Component
 
