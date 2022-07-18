@@ -4,10 +4,9 @@ module Entities.Triangle
 where
 
 import Core.Entity (Entity, newEntityFromList)
-import Systems.GLFW (addGraphics)
 
 -- | Pre-made Actor Entity
 triangle :: Entity
-triangle = newEntityFromList [addGraphics]
+triangle = newEntityFromList []
 
 -- TODO Bug with empty entities

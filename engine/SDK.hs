@@ -5,13 +5,13 @@ module SDK
     newEntityFromList,
     gameV1,
     addToGame,
-    Game,
+    Game (..),
     GameImpl,
   )
 where
 
 import Core.Component (Component (..))
-import Core.Engine (GameImpl, gameV1)
+import Core.EngineV1 (GameImpl, gameV1)
 import Core.Entity (Entity, newEntityFromList)
-import Core.Game (Game, addToGame)
+import Core.Game (Game (..), addToGame)
 import Core.Util (Creatable (..))

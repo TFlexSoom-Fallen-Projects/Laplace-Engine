@@ -3,9 +3,10 @@
 -- |
 --    =__Engine:__
 --    Implementation of all classes
-module Core.Engine
+module Core.EngineV1
   ( GameImpl,
     gameV1,
+    runFrame,
   )
 where
 
@@ -94,7 +95,9 @@ runFrame
 transformFrame :: DependencyTree SystemKey -> (SystemKey -> SystemImpl) -> (FramePerspectiveImpl, [EntityPerspectiveImpl]) -> (FramePerspectiveImpl, [EntityPerspectiveImpl])
 transformFrame deps sysGetter frameData = DependencyTree.foldr' foldWithKeys frameData deps
   where
-    foldWithKeys key = sysImpl key . cacheKey key
+    finalLength = length (snd frameData)
+    assertion = assert "Entity Array Size is Same For Every Fold" (\x -> finalLength == length (snd x))
+    foldWithKeys key = assertion . sysImpl key . cacheKey key
     sysImpl key = implementation (sysGetter key)
 
 cacheKey :: SystemKey -> (FramePerspectiveImpl, [EntityPerspectiveImpl]) -> (FramePerspectiveImpl, [EntityPerspectiveImpl])

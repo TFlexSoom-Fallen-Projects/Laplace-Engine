@@ -1,17 +1,12 @@
 module Engine.SDKSpec (spec) where
 
-import Data.Map (Map, empty)
-import qualified Data.Map as Map
-import SDK (newEntity, newGame)
+import Core.EngineV1 (runFrame)
+import SDK (GameImpl, gameV1)
 import Test.Hspec (Spec, describe, it, shouldBe)
 import Test.QuickCheck ()
 
 spec :: Spec
 spec = do
-  describe "newEntity" $ do
-    it "returns an empty map" $ do
-      newEntity `shouldBe` empty
-
-  describe "newGame" $ do
-    it "returns an empty list" $ do
-      newGame `shouldBe` ([], [])
+  describe "gameV1" $ do
+    it "returns empty IO lists when empty" $ do
+      length (fst (runFrame gameV1)) `shouldBe` 0

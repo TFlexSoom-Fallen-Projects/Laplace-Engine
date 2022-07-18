@@ -7,4 +7,4 @@ import SDK (runFrames, runGame)
 -- main = runGame exampleGame
 
 main :: IO ()
-main = runFrames 1 exampleGame
+main = runFrames 20 exampleGame

@@ -1,14 +1,11 @@
 module Main (main) where
 
-import ExampleGame (exampleGame)
-import SDK (runFrames, runGame)
+import Engine.SDKSpec
+import Test.Hspec (Spec, describe, hspec)
 
 main :: IO ()
-main = runGame exampleGame
+main = hspec mainSpec
 
--- main :: IO ()
--- main = hspec spec
-
--- spec :: Spec
--- spec = do
---   describe "Engine" Engine.SDKSpec.spec
+mainSpec :: Spec
+mainSpec = do
+  describe "Engine" Engine.SDKSpec.spec

@@ -22,8 +22,6 @@ description:         Please see the README on GitHub at <https://github.com/tfle
 dependencies:
 - base >= 4.7 && < 5
 - containers
-- OpenGL >= 3 && < 4
-- GLFW-b >= 3.3 && < 4
 
 
 library:
@@ -55,3 +53,6 @@ tests:
     - -with-rtsopts=-N
     dependencies:
     - Laplace-Engine
+    - QuickCheck 
+    - HUnit
+    - hspec
